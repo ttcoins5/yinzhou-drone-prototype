@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1016" viewBox="0 0 960 1016" role="img" aria-labelledby="title desc">
+  <title id="title">无人机实名登记证脱敏示例</title>
+  <desc id="desc">采用登记证表格版式的脱敏 mock 图片，展示无人机登记证载字段。</desc>
+  <rect width="960" height="1016" fill="#f3f5f7"/>
+  <rect x="12" y="12" width="936" height="992" fill="#fff" stroke="#8a929a" stroke-width="2"/>
+  <g fill="none" stroke="#8a929a" stroke-width="2">
+    <rect x="20" y="20" width="920" height="160"/>
+    <rect x="20" y="186" width="226" height="196"/>
+    <rect x="250" y="186" width="456" height="196"/>
+    <rect x="710" y="186" width="230" height="196"/>
+    <rect x="20" y="388" width="226" height="166"/>
+    <rect x="250" y="388" width="226" height="166"/>
+    <rect x="480" y="388" width="226" height="166"/>
+    <rect x="710" y="388" width="230" height="166"/>
+    <rect x="20" y="560" width="456" height="166"/>
+    <rect x="480" y="560" width="460" height="166"/>
+    <rect x="20" y="732" width="456" height="166"/>
+    <rect x="480" y="732" width="460" height="166"/>
+    <rect x="20" y="904" width="920" height="92"/>
+  </g>
+  <g fill="#1f4f92" stroke="#1f4f92" stroke-linecap="round">
+    <path d="M52 65c37 0 66-12 95-29-18 26-43 45-78 51 27 7 52 7 75 2-22 17-48 25-78 21 20 13 43 18 66 15-24 17-53 22-83 13-18-6-32-18-42-32 20 5 38 5 55 0-22-8-37-21-47-37 25 4 43 2 62-4z" fill="#1f4f92" stroke="none"/>
+    <path d="M124 47l7 17 18 1-14 11 5 18-16-10-16 10 5-18-14-11 18-1z" fill="#d43b3b" stroke="none"/>
+  </g>
+  <g fill="#30343a" font-family="PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif" text-anchor="middle">
+    <text x="480" y="55" font-size="27" font-weight="700" letter-spacing="8">中国民用航空局</text>
+    <text x="480" y="88" font-size="20" font-family="Arial, sans-serif" letter-spacing="1">CIVIL AVIATION ADMINISTRATION OF CHINA</text>
+    <text x="480" y="123" font-size="26" font-weight="700" letter-spacing="8">无人机实名登记证</text>
+    <text x="480" y="153" font-size="18" font-family="Arial, sans-serif" letter-spacing="1">CERTIFICATE OF UAS REGISTRATION</text>
+  </g>
+  <g fill="#363b42" font-family="PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <g font-size="19" font-weight="700">
+      <text x="38" y="226">1.登记标志：</text><text x="268" y="226">2.航空器型号和制造人：</text><text x="728" y="226">3.序号：</text>
+      <text x="38" y="428">4.产品名称：</text><text x="268" y="428">5.空机重量：</text><text x="498" y="428">6.最大起飞重量：</text><text x="728" y="428">7.类型：</text>
+      <text x="38" y="600">8.本证发给：</text><text x="498" y="600">9.联系手机：</text>
+      <text x="38" y="772">10.状态：</text><text x="498" y="772">11.注册日期：</text>
+    </g>
+    <g font-size="17" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-weight="600">
+      <text x="38" y="266">Registration Marks:</text><text x="268" y="266">Manufacturer And Manufacturer's</text><text x="268" y="293">Designation Of Aircraft:</text><text x="728" y="266">Serial No.:</text>
+      <text x="38" y="468">Aircraft Name:</text><text x="268" y="468">Empty Weight:</text><text x="498" y="468">MTOW:</text><text x="728" y="468">Type:</text>
+      <text x="38" y="640">Issued To:</text><text x="498" y="640">Mobile Phone:</text>
+      <text x="38" y="812">Status:</text><text x="498" y="812">Date Of Registration:</text>
+    </g>
+    <g font-size="20" font-weight="500">
+      <text x="52" y="344">UAS03****81</text><text x="280" y="344">M30 / 某制造商（演示）</text><text x="742" y="344">SN-****-0192</text>
+      <text x="52" y="526">云翼 M30（演示）</text><text x="282" y="526">3.77 kg</text><text x="512" y="526">3.77 kg</text><text x="742" y="526">多旋翼航空器</text>
+      <text x="52" y="698">陈先生（演示）</text><text x="512" y="698">138****2408</text>
+      <text x="52" y="870">正常</text><text x="512" y="870">2026-07-22</text>
+    </g>
+    <text x="480" y="962" font-size="17" text-anchor="middle">静态交互原型展示 · 信息已脱敏 · 不作为真实登记凭证使用</text>
+  </g>
+</svg>

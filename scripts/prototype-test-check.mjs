@@ -1,0 +1,802 @@
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import vm from 'node:vm';
+
+const root = process.cwd();
+const required = ['index.html', 'apps/zheliban/index.html', 'apps/zheliban/app.js', 'apps/zheliban/styles.css', 'apps/admin/index.html', 'apps/admin/app.js', 'apps/admin/styles.css', 'apps/admin/js/core/ui.js', 'apps/admin/js/core/rich-editor.js', 'apps/admin/js/core/form-page.js', 'apps/admin/js/core/page-help.js', 'apps/admin/js/modules/forms.js', 'apps/admin/js/modules/system.js', 'apps/admin/rich-editor.css', 'shared/data/mock-data.js', 'docs/design/DESIGN.md'];
+const errors = required.filter((file) => !existsSync(join(root, file))).map((file) => `缺少文件：${file}`);
+const agentRules = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+if (!agentRules.includes('未完成上述同步维护，不得视为本次原型修改完成')) errors.push('AGENTS.md 缺少页面说明同步维护完成规则');
+if (!agentRules.includes('公安后台所有改动、字段都必须同步更新右侧「页面说明」') || !agentRules.includes('右侧页面说明同步（强制）')) errors.push('AGENTS.md 缺少后台改动必须同步右侧说明的强制规则');
+if (!agentRules.includes('公安后台原型规范') || !agentRules.includes('独立表单页') || !agentRules.includes('禁编辑')) errors.push('AGENTS.md 缺少公安后台页面形态与禁编辑规范');
+if (!agentRules.includes('业务规则与交互标准写进右侧「页面说明」') || !agentRules.includes('不要在原型主内容区用提示条')) errors.push('AGENTS.md 缺少后台规则写入页面说明、不在主界面展示的规范');
+if (!agentRules.includes('交付呈现') || !agentRules.includes('页面主内容区不展示操作指引') || !agentRules.includes('页面标题下的模块介绍文案')) errors.push('AGENTS.md 缺少交付呈现：主内容区不展示说明文案的规范');
+const certificateAsset = readFileSync(join(root, 'shared/assets/uom-registration-certificate.svg'), 'utf8');
+if (!certificateAsset.includes('无人机实名登记证') || !certificateAsset.includes('静态交互原型展示') || !certificateAsset.includes('UAS03****81')) errors.push('脱敏登记证素材未保留表格版式、原型边界或脱敏字段');
+if (!existsSync(join(root, 'shared/assets/flight-plan-batch-template.xlsx'))) errors.push('飞行计划批量导入 Excel 模板缺失');
+const files = [];
+const walk = (dir) => readdirSync(dir).forEach((name) => { const full = join(dir, name); const entry = statSync(full); if (entry.isDirectory() && !full.includes('.git')) walk(full); else if (entry.isFile()) files.push(full); });
+walk(root);
+const publicFiles = files.filter((file) => /\.(html|js|css)$/u.test(file));
+const sensitive = /(?:1[3-9]\d{9}|\b\d{15,18}[0-9Xx]\b|https?:\/\/|api[_-]?key|token\s*[:=])/iu;
+publicFiles.forEach((file) => { const content = readFileSync(file, 'utf8'); if (sensitive.test(content)) errors.push(`疑似敏感或外部地址：${file.replace(root + '/', '')}`); });
+['apps/zheliban/index.html', 'apps/admin/index.html'].forEach((file) => { const content = readFileSync(join(root, file), 'utf8'); if (!content.includes('../../shared/data/mock-data.js')) errors.push(`共享数据引用缺失：${file}`); });
+const zhelibanHtml = readFileSync(join(root, 'apps/zheliban/index.html'), 'utf8');
+if (!zhelibanHtml.includes('viewport-toolbar') || !zhelibanHtml.includes('data-action="set-viewport"') || !zhelibanHtml.includes('data-value="mobile"') || !zhelibanHtml.includes('data-value="desktop"')) errors.push('浙里办用户端缺少手机端/PC 端预览模式切换入口');
+const zhelibanApp = readFileSync(join(root, 'apps/zheliban/app.js'), 'utf8');
+if (!zhelibanApp.includes('desktop-chrome') || !zhelibanApp.includes('top-nav') || !zhelibanApp.includes('set-viewport') || zhelibanApp.includes('is-overlay')) errors.push('浙里办用户端缺少独立 PC 顶栏导航，或仍将导航与 Banner 融合');
+const zhelibanCss = readFileSync(join(root, 'apps/zheliban/styles.css'), 'utf8');
+if (!zhelibanCss.includes('.hero-status') || !zhelibanCss.includes('min-height:292px') || !zhelibanCss.includes('min-height:228px') || !zhelibanCss.includes('--mobile-gutter:14px') || !zhelibanCss.includes('@media(prefers-reduced-motion:reduce)')) errors.push('浙里办用户端缺少移动密度层、首页主视觉、服务状态或减少动态支持');
+if (zhelibanCss.includes('.hero-metric') || zhelibanApp.includes('hero-metric') || zhelibanApp.includes('已登记设备')) errors.push('首页 Banner 仍保留设备数字统计卡');
+if (!zhelibanCss.includes('.hero-glow') || !zhelibanCss.includes('.hero-cloud') || !zhelibanApp.includes('path-main') || !zhelibanApp.includes('hero-ring')) errors.push('首页 Banner 未补充氛围层（光晕/云层/双航迹/环）');
+if (!zhelibanCss.includes('.page-toolbar') || !zhelibanCss.includes('.mobile-chrome') || !zhelibanCss.includes('.mobile-app-title')) errors.push('浙里办缺少通用手机顶栏或服务页工具条样式');
+if (!zhelibanCss.includes('.mobile-more{display:inline-flex') || !zhelibanCss.includes('.page-toolbar-actions .tabs{flex:1 1 auto;width:100%')) errors.push('手机顶栏更多按钮或工具条 Tab 全宽样式不正确');
+if (!zhelibanCss.includes('.activity-card .activity-cover{min-height:168px}') || !zhelibanCss.includes('.activity-card footer{display:flex') || !zhelibanCss.includes('.phone-shell.viewport-desktop .activity-list{grid-template-columns:repeat(2,minmax(0,1fr))')) errors.push('活动中心卡片比例或 PC 双列布局不正确');
+if (!zhelibanCss.includes('.drone-tabs{margin-bottom:12px}') && !zhelibanCss.includes('.page-toolbar-actions .drone-tabs')) errors.push('浙里办无人机类型标签与搜索框未保留必要间距');
+const cssRules = (selector) => [...zhelibanCss.matchAll(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\{([^{}]*)\\}`, 'gu'))].map((match) => Object.fromEntries(match[1].split(';').filter(Boolean).map((declaration) => { const separator = declaration.indexOf(':'); return [declaration.slice(0, separator), declaration.slice(separator + 1)]; })));
+const requireRule = ({ selector, index = 0, count = 1, expected }) => {
+  const rules = cssRules(selector);
+  if (rules.length !== count || Object.entries(expected).some(([property, value]) => rules[index]?.[property] !== value)) errors.push(`浙里办布局契约不符合要求：${selector}`);
+};
+if (!zhelibanCss.includes('max-inline-size:1280px') || !zhelibanCss.includes('padding:16px max(96px,5vw) 24px')) errors.push('浙里办 PC 端缺少两侧安全边距或最大宽度约束');
+if (!zhelibanCss.includes('.phone-shell.viewport-desktop .profile-entry-list{width:100%;max-width:none') || !zhelibanCss.includes('.phone-shell.viewport-desktop .profile-entry{grid-template-columns:40px minmax(0,1fr) auto') || !zhelibanCss.includes('min-height:64px')) errors.push('浙里办“我的”页 PC 端未改为紧凑全宽单列账户服务列表');
+if (!zhelibanCss.includes('grid-template-rows:42% 58%') || !zhelibanApp.includes("return 'mobile'") || /matchMedia\('\(min-width: 900px\)'\)\.matches\) return 'desktop'/u.test(zhelibanApp)) errors.push('浙里办登录页未锁定手机端 42/58 比例，或刷新仍会按浏览器宽度自动切到 PC');
+requireRule({ selector: 'html,body', expected: { 'block-size': '100%', overflow: 'hidden' } });
+requireRule({ selector: '.phone-shell', expected: { display: 'grid', 'grid-template-rows': 'minmax(0,1fr) auto', 'inline-size': '100%', 'block-size': '100dvb', 'min-block-size': '0', overflow: 'hidden' } });
+requireRule({ selector: '.phone-shell.viewport-desktop', index: 1, count: 2, expected: { 'grid-template-columns': 'minmax(0,1fr)', 'grid-template-rows': '64px minmax(0,1fr)', 'inline-size': '100%', overflow: 'hidden' } });
+requireRule({ selector: '.main-content', count: 3, expected: { 'min-block-size': '0', 'overflow-y': 'auto', padding: '0 16px 20px', 'scrollbar-width': 'none', '-ms-overflow-style': 'none' } });
+requireRule({ selector: '.main-content::-webkit-scrollbar', expected: { display: 'none' } });
+requireRule({ selector: '.bottom-nav', count: 2, expected: { position: 'relative', padding: '6px 8px calc(6px + env(safe-area-inset-bottom))' } });
+if (/\.bottom-nav[^{]*\{[^}]*position:(?:fixed|absolute)/u.test(zhelibanCss) || /\.phone-shell[^{]*\{[^}]*overflow(?:-y)?:auto/u.test(zhelibanCss)) errors.push('浙里办 AppShell 存在冲突的滚动或定位声明');
+if (!/\.modal-layer\{[^}]*position:absolute/u.test(zhelibanCss) || /\.modal-layer\{[^}]*position:fixed/u.test(zhelibanCss) || !zhelibanCss.includes('.phone-shell.viewport-mobile .modal-layer') || !/\.toast\{[^}]*position:absolute/u.test(zhelibanCss)) errors.push('浙里办弹窗/Toast 未约束在 phone-shell 内（仍使用 fixed 或缺少移动端覆盖层规则）');
+if (!zhelibanCss.includes('@media(min-width:900px)') || !zhelibanCss.includes('grid-template-areas:"chrome" "content"') || !zhelibanCss.includes('.top-nav') || !zhelibanCss.includes('.desktop-chrome') || !zhelibanCss.includes('.viewport-toolbar')) errors.push('用户端缺少手机/PC 预览切换或浙江省政务服务网顶部导航布局');
+if (!zhelibanCss.includes('.phone-shell.viewport-mobile .home-dashboard{display:flex;flex-direction:column;gap:8px}') || !zhelibanCss.includes('.home-dashboard .home-activity-section{order:3}') || !zhelibanCss.includes('.home-dashboard .pinned-notice-section{order:4}')) errors.push('用户端首页移动端活动中心未排在法规与公告之前');
+if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; } else console.log(`静态原型检查通过：${required.length} 个必需文件，${publicFiles.length} 个公开静态文件已扫描。`);
+
+const browserStorage = new Map();
+const runtime = (appFile, initialHash, checks, initialStorage = null) => {
+  if (initialStorage) Object.entries(initialStorage).forEach(([key, value]) => browserStorage.set(key, JSON.stringify(value)));
+  const listeners = { document: {}, window: {} };
+  let formValid = true;
+  const app = {
+    innerHTML: '',
+    className: 'admin-shell',
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  };
+  class FileReaderMock {
+    constructor() {
+      this.result = 'data:image/png;base64,AA==';
+      this.listeners = {};
+    }
+    addEventListener(type, fn) { this.listeners[type] = fn; }
+    readAsDataURL() { this.listeners.load?.(); }
+  }
+  const documentMock = {
+    querySelector(selector) {
+      if (selector === '#app') return app;
+      if (selector === '#prototype-form' || selector === '#admin-form' || selector === '#ocr-form' || selector === '#profile-form' || selector === '#feedback-form' || selector === '#drone-create-form') return { reportValidity: () => formValid };
+      if (selector === '#search') return null;
+      return null;
+    },
+    querySelectorAll() { return []; },
+    addEventListener(type, fn) { listeners.document[type] = fn; }
+  };
+  const windowMock = {
+    addEventListener(type, fn) { listeners.window[type] = fn; },
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    sessionStorage: {
+      getItem(key) { return browserStorage.get(`session:${key}`) || null; },
+      setItem(key, value) { browserStorage.set(`session:${key}`, value); },
+      removeItem(key) { browserStorage.delete(`session:${key}`); }
+    },
+    localStorage: {
+      getItem(key) { return browserStorage.get(key) || null; },
+      setItem(key, value) { browserStorage.set(key, value); },
+      removeItem(key) { browserStorage.delete(key); }
+    }
+  };
+  const context = { window: windowMock, document: documentMock, location: { hash: initialHash }, FileReader: FileReaderMock, setTimeout: (fn, delay) => { if (delay === 700) fn(); return 0; }, clearTimeout: () => {}, console, prompt: () => '' };
+  context.window.prompt = context.prompt;
+  context.window.clearTimeout = context.clearTimeout;
+  context.window.setTimeout = context.setTimeout;
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(readFileSync(join(root, 'shared/data/mock-data.js'), 'utf8'), context);
+  if (appFile.startsWith('apps/admin/')) {
+    ['apps/admin/js/core/ui.js', 'apps/admin/js/core/rich-editor.js', 'apps/admin/js/core/form-page.js', 'apps/admin/js/core/page-help.js', 'apps/admin/js/modules/forms.js', 'apps/admin/js/modules/system.js'].forEach((file) => {
+      vm.runInContext(readFileSync(join(root, file), 'utf8'), context);
+    });
+    ['AdminUI', 'AdminRichEditor', 'AdminFormPage', 'AdminPageHelp', 'AdminForms', 'AdminSystem'].forEach((name) => {
+      if (context[name]) context.window[name] = context[name];
+      else if (context.window[name]) context[name] = context.window[name];
+    });
+  }
+  vm.runInContext(readFileSync(join(root, appFile), 'utf8'), context);
+  const visit = (hash) => { context.location.hash = hash; listeners.window.hashchange(); };
+  const click = (dataset) => {
+    const previousHash = context.location.hash;
+    listeners.document.click({ target: { closest: () => ({ dataset }) } });
+    if (context.location.hash !== previousHash) listeners.window.hashchange();
+  };
+  const change = (id, value) => {
+    if (id && typeof id === 'object') listeners.document.change({ target: { dataset: id, value } });
+    else listeners.document.change({ target: { id, value } });
+  };
+  const search = (value) => listeners.document.input({ target: { id: 'search', value } });
+  const upload = (type = 'image/png', size = 1024, id = 'certificate-file', name = '登记证图片.png') => listeners.document.change({ target: { id, files: [{ type, size, name }] } });
+  const uploadFeedback = (files = [{ type: 'image/png', size: 1024, name: '反馈图片 1.png' }, { type: 'image/jpeg', size: 1024, name: '反馈图片 2.jpg' }]) => listeners.document.change({ target: { dataset: { feedbackImageField: '图片附件' }, files } });
+  const input = (field, value) => listeners.document.input({ target: { dataset: { ocrField: field }, value } });
+  const inputGuideSearch = (value) => listeners.document.input({ target: { id: 'guide-search', value } });
+  const inputFaqSearch = (value) => listeners.document.input({ target: { id: 'faq-search', value } });
+  const inputProfile = (field, value) => listeners.document.input({ target: { dataset: { profileField: field }, value } });
+  const inputUserProfile = (field, value) => listeners.document.input({ target: { dataset: { userProfileField: field }, value } });
+  const inputCompany = (field, value) => listeners.document.input({ target: { dataset: { companyField: field }, value } });
+  const changeCompany = (field, value) => listeners.document.change({ target: { dataset: { companyField: field }, value } });
+  const inputMember = (field, value) => listeners.document.input({ target: { dataset: { memberField: field }, value } });
+  const inputCompanyProfile = (field, value) => listeners.document.input({ target: { dataset: { companyProfileField: field }, value } });
+  const changeCompanyProfile = (field, value) => listeners.document.change({ target: { dataset: { companyProfileField: field }, value } });
+  const inputDraft = (field, value) => listeners.document.input({ target: { dataset: { draftField: field }, value } });
+  const changeDraft = (field, value) => listeners.document.change({ target: { dataset: { draftField: field }, value } });
+  const inputLogin = (field, value) => listeners.document.input({ target: { dataset: { loginField: field }, value } });
+  const inputDrone = (field, value) => listeners.document.input({ target: { dataset: { droneField: field }, value } });
+  const changeDrone = (field, value) => listeners.document.change({ target: { dataset: { droneField: field }, value } });
+  checks({ app, visit, click, change, search, upload, uploadFeedback, input, inputGuideSearch, inputFaqSearch, inputProfile, inputUserProfile, inputCompany, changeCompany, inputMember, inputCompanyProfile, changeCompanyProfile, inputDraft, changeDraft, inputLogin, inputDrone, changeDrone, setValidity: (value) => { formValid = value; } });
+};
+
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload, uploadFeedback, input, inputGuideSearch, inputFaqSearch, inputProfile, inputCompany, changeCompany, inputMember, inputDrone, changeDrone, setValidity }) => {
+  if (!app.innerHTML.includes('个人登录') || !app.innerHTML.includes('法人登录')) errors.push('用户端登录类型入口渲染失败');
+  if (app.innerHTML.includes('login-help')) errors.push('用户端登录页残留辅助提示容器');
+  click({ action: 'login', value: 'personal' });
+  visit('#/home');
+  if (!app.innerHTML.includes('让每一次起飞')) errors.push('浙里办首页运行时渲染失败');
+  if (!app.innerHTML.includes('服务运行正常') || !app.innerHTML.includes('hero-glow') || app.innerHTML.includes('hero-metric') || app.innerHTML.includes('已登记设备')) errors.push('首页 Banner 仍含设备数字或缺少氛围层');
+  if (!['quick-card--flights', 'quick-card--certificates', 'quick-card--drones', 'quick-card--guides'].every((className) => app.innerHTML.includes(className))) errors.push('个人首页常用服务缺少语义化视觉变体');
+  if (!['飞行计划申报', 'UOM 登记证', '我的无人机', 'UOM平台流程指导'].every((label) => app.innerHTML.includes(label)) || app.innerHTML.includes('我的飞手') || app.innerHTML.includes('UOM平台申报指引') || app.innerHTML.includes('>飞行计划</b>')) errors.push('个人首页常用服务入口不正确');
+  if (!app.innerHTML.includes('活动中心') || app.innerHTML.includes('近期低空安全活动与报名安排') || !app.innerHTML.includes('查看全部')) errors.push('浙里办首页活动中心辅助文案未清理');
+  if (!app.innerHTML.includes('企业无人机合规使用专题沙龙') || !app.innerHTML.includes('夏季低空安全宣传进社区') || !app.innerHTML.includes('2026 年鄞州区无人机飞行安全培训') || !app.innerHTML.includes('首南街道低空安全入户宣讲') || !app.innerHTML.includes('姜山镇农业植保无人机安全交流会') || (app.innerHTML.match(/home-activity-card/g) || []).length < 6) errors.push('首页活动中心未展示全部报名中与进行中活动');
+  if (app.innerHTML.includes('青少年无人机科普体验日') || app.innerHTML.includes('东钱湖低空摄影安全巡讲') || app.innerHTML.includes('邱隘镇文明飞行倡议签名活动')) errors.push('首页活动中心不应展示已结束或已下架活动');
+  if (!app.innerHTML.includes('法规与公告') || (app.innerHTML.match(/pinned-home-notice/g) || []).length !== 3 || (app.innerHTML.match(/class="article-visual/g) || []).length !== 3 || !app.innerHTML.includes('▶ 03:26') || app.innerHTML.includes('近期飞行计划')) errors.push('浙里办首页法规公告专区未按三条图文或视频内容展示');
+  click({ action: 'article-detail', id: 'LAW-02' });
+  if (!app.innerHTML.includes('《无人驾驶航空器飞行管理暂行条例》图解视频') || !app.innerHTML.includes('video-mock') || !app.innerHTML.includes('生效 2024-01-01 至 2029-12-31')) errors.push('首页置顶视频无法进入详情展示或缺少生效起止');
+  click({ action: 'back', fallback: 'home' });
+  if (app.innerHTML.includes('data-action="role"') || app.innerHTML.includes('切换登录类型')) errors.push('用户端首页不应提供身份切换');
+  visit('#/flights');
+  if (!app.innerHTML.includes('新增飞行计划')) errors.push('浙里办飞行计划路由失败');
+  if (app.innerHTML.includes('待补充') || app.innerHTML.includes('已上传 UOM 审批截图') || app.innerHTML.includes('搜索计划编号或街道') || app.innerHTML.includes('<p>FP-')) errors.push('浙里办飞行计划列表字段未按计划名称和任务性质展示');
+  click({ action: 'open-batch' });
+  if (!app.innerHTML.includes('template-download-card') || !app.innerHTML.includes('XLSX') || !app.innerHTML.includes('飞行计划导入模板') || !app.innerHTML.includes('已包含字段说明与示例数据') || !app.innerHTML.includes('href="../../shared/assets/flight-plan-batch-template.xlsx"') || !app.innerHTML.includes('download="飞行计划批量导入模板.xlsx"') || app.innerHTML.includes('模板字段') || app.innerHTML.includes('按模板整理计划后上传文件') || app.innerHTML.includes('原型模拟解析')) errors.push('批量导入弹窗模板下载卡片未按要求配置');
+  click({ action: 'close-modal' });
+  click({ action: 'modal', modal: 'flight' });
+  if (app.innerHTML.includes('自主申报与执行确认') || !['飞行活动类型', '任务性质', '操控模式', '飞行模式', '预计开始时间', '预计结束时间', '通信联络方式', '最大飞行高度', '起降备降场地', '宁波市鄞州区'].every((field) => app.innerHTML.includes(field))) errors.push('浙里办飞行计划字段未与 UOM 申请信息口径对齐');
+  setValidity(false);
+  click({ action: 'submit-modal' });
+  if (!app.innerHTML.includes('role="dialog"')) errors.push('浙里办表单校验失败状态未保留');
+  setValidity(true);
+  click({ action: 'close-modal' });
+  click({ action: 'execute', id: 'FP-20260803-018' });
+  if (!app.innerHTML.includes('已确认执行')) errors.push('浙里办执行确认交互失败');
+  visit('#/activities');
+  if (app.innerHTML.includes('activity-carousel') || app.innerHTML.includes('重点活动') || app.innerHTML.includes('activity-slide') || app.innerHTML.includes('data-action="activity-slide"')) errors.push('活动中心仍保留重点活动轮播');
+  click({ action: 'join', id: 'ACT-01' });
+  if (!app.innerHTML.includes('已报名')) errors.push('浙里办活动报名交互失败');
+  click({ action: 'activity-filter' });
+  if (!app.innerHTML.includes('查看全部')) errors.push('浙里办活动筛选交互失败');
+  visit('#/activity/ACT-01');
+  if (!['活动开始时间','活动结束时间','报名开始时间','报名结束时间','主办单位','咨询方式','活动介绍'].every((field) => app.innerHTML.includes(field))) errors.push('浙里办活动详情未展示完整时间与富文本说明');
+  if (app.innerHTML.includes('<aside><b>咨询方式</b>')) errors.push('浙里办活动详情咨询方式应并入上方信息区，不应单独放在活动介绍下方');
+  click({ action: 'open-enroll', id: 'ACT-02' });
+  if (!app.innerHTML.includes('确认活动报名') || !app.innerHTML.includes('报名人')) errors.push('浙里办活动报名确认页缺失');
+  if (app.innerHTML.includes('请按活动报名表单填写信息') || app.innerHTML.includes('活动安排将显示在')) errors.push('浙里办报名弹窗不应展示操作指引说明');
+  click({ action: 'submit-enrollment' });
+  if (!app.innerHTML.includes('报名成功')) errors.push('浙里办活动报名提交反馈缺失');
+  visit('#/activity/ACT-02');
+  if (!app.innerHTML.includes('activity-actions') || !app.innerHTML.includes('查看报名信息') || !app.innerHTML.includes('取消报名') || app.innerHTML.includes('sticky-action')) errors.push('浙里办已报名活动详情应在底部并排展示查看报名信息与取消报名');
+  click({ action: 'show-enrollment', id: 'ACT-02' });
+  if (!app.innerHTML.includes('联系电话') || !app.innerHTML.includes('陈先生') || !app.innerHTML.includes('我知道了')) errors.push('浙里办已报名活动缺失报名填写内容');
+  if (/class="modal-actions"[^>]*>[\s\S]*?cancel-enrollment/u.test(app.innerHTML)) errors.push('报名信息弹窗不应再放取消报名');
+  click({ action: 'close-modal' });
+  click({ action: 'cancel-enrollment', id: 'ACT-02' });
+  if (!app.innerHTML.includes('已取消报名')) errors.push('浙里办取消报名反馈缺失');
+  visit('#/activities');
+  click({ action: 'activity-filter' });
+  if (!app.innerHTML.includes('data-action="open-enroll" data-id="ACT-02"')) errors.push('浙里办活动取消报名状态回退失败');
+  visit('#/article/NEWS-01');
+  if (!app.innerHTML.includes('article-kind') || !app.innerHTML.includes('低空安全宣传月活动安排公告') || !app.innerHTML.includes('活动报名时间')) errors.push('浙里办新闻公告详情未展示正文');
+  visit('#/knowledge');
+  if (!app.innerHTML.includes('knowledge-grid') || !app.innerHTML.includes('article-visual') || !app.innerHTML.includes('低空飞行前的空域与风险核查要点') || !app.innerHTML.includes('夏季无人机飞行安全提示（视频版）')) errors.push('浙里办科普图文视频内容库未完整展示');
+  if (!app.innerHTML.includes('生效 2026-07-16 至 2027-07-15')) errors.push('浙里办法规列表未展示生效起止');
+  click({ action: 'article-kind', value: '法规' });
+  if (!app.innerHTML.includes('低空飞行前的空域与风险核查要点') || app.innerHTML.includes('2026 年低空安全宣传月活动安排公告')) errors.push('浙里办科普内容分类筛选失败');
+  visit('#/article/LAW-01');
+  if (!app.innerHTML.includes('生效 2026-07-21 至 2027-07-20') || !app.innerHTML.includes('无人驾驶航空器飞行安全提示')) errors.push('浙里办法规详情未展示生效起止');
+  visit('#/guides');
+  if (!app.innerHTML.includes('data-action="guide-tab" data-value="manual"') || !app.innerHTML.includes('UOM 平台操作手册') || !app.innerHTML.includes('序号：01') || !app.innerHTML.includes('搜索操作手册标题或内容') || !app.innerHTML.includes('飞行申报结果查询') || app.innerHTML.includes('faq-pagination') || app.innerHTML.includes('图文流程') || app.innerHTML.includes('guide-overview') || app.innerHTML.includes('查看已发布的图文操作流程。') || app.innerHTML.includes('搜索问题关键词') || app.innerHTML.includes('class="page-title"')) errors.push('浙里办申报指引手机端布局不正确或仍展示分页');
+  inputGuideSearch('登记信息');
+  if (!app.innerHTML.includes('航空器登记信息维护') || app.innerHTML.includes('飞行活动自主申报')) errors.push('浙里办操作手册关键词搜索失败');
+  inputGuideSearch('不存在的手册');
+  if (!app.innerHTML.includes('暂无符合条件的操作手册')) errors.push('浙里办操作手册搜索空结果反馈缺失');
+  inputGuideSearch('');
+  click({ action: 'guide-tab', value: 'faq' });
+  if (!app.innerHTML.includes('data-action="guide-tab" data-value="faq"') || !app.innerHTML.includes('搜索问题关键词') || !app.innerHTML.includes('FAQ-05') || !app.innerHTML.includes('FAQ-06') || app.innerHTML.includes('faq-pagination') || app.innerHTML.includes('搜索操作手册标题或内容')) errors.push('浙里办常见问题手机端应展示全部条目且不显示分页');
+  inputFaqSearch('无法选择');
+  if (!app.innerHTML.includes('飞行区域无法选择或填写有误怎么办？') || app.innerHTML.includes('什么情况下需要进行飞行活动自主申报？')) errors.push('浙里办常见问题关键词搜索失败');
+  inputFaqSearch('不存在的问题');
+  if (!app.innerHTML.includes('暂无符合条件的问题')) errors.push('浙里办常见问题搜索空结果反馈缺失');
+  inputFaqSearch('');
+  click({ action: 'set-viewport', value: 'desktop' });
+  click({ action: 'guide-tab', value: 'manual' });
+  if (!app.innerHTML.includes('UOM 平台操作手册分页') || !app.innerHTML.includes('共 2 条，第 1/1 页') || !app.innerHTML.includes('faq-pagination')) errors.push('浙里办申报指引 PC 端分页控件缺失');
+  click({ action: 'guide-tab', value: 'faq' });
+  if (!app.innerHTML.includes('常见问题分页') || !app.innerHTML.includes('FAQ-05') || !app.innerHTML.includes('FAQ-06') || !app.innerHTML.includes('共 6 条，第 1/1 页')) errors.push('浙里办常见问题 PC 端分页控件缺失');
+  click({ action: 'set-viewport', value: 'mobile' });
+  click({ action: 'guide-tab', value: 'manual' });
+  if (app.innerHTML.includes('faq-pagination')) errors.push('切回手机端后申报指引仍展示分页');
+  click({ action: 'open-guide', id: 'GUIDE-02' });
+  if (!app.innerHTML.includes('guide-detail-modal') || !app.innerHTML.includes('modal-layer--center') || !app.innerHTML.includes('航空器登记信息维护') || !app.innerHTML.includes('图文说明') || !app.innerHTML.includes('操作步骤') || !app.innerHTML.includes('登记证字段核对界面') || app.innerHTML.includes('guide-manual-image') || app.innerHTML.includes('操作说明图') || app.innerHTML.includes('faq-rich-content"><section')) errors.push('浙里办操作手册详情弹窗应居中并以连续富文本展示');
+  click({ action: 'close-modal' });
+  click({ action: 'guide-tab', value: 'faq' });
+  click({ action: 'open-faq', id: 'FAQ-01' });
+  if (!app.innerHTML.includes('什么情况下需要进行飞行活动自主申报？') || !app.innerHTML.includes('faq-rich-content') || !app.innerHTML.includes('图文说明') || !app.innerHTML.includes('modal-layer--center') || app.innerHTML.includes('faq-rich-content"><section') || app.innerHTML.includes('富文本说明与一张完整操作说明图，便于移动端查看。')) errors.push('浙里办 FAQ 弹窗应居中并以连续富文本展示');
+  if (app.innerHTML.includes('以下内容由后台维护') || app.innerHTML.includes('静态交互原型与 mock')) errors.push('浙里办 FAQ 弹窗不应展示原型边界说明');
+  if (app.innerHTML.includes('data-action="open-uom-platform"') || app.innerHTML.includes('申报前准备')) errors.push('浙里办 UOM 页面仍展示已移除的申报入口或旧准备模块');
+  visit('#/messages');
+  if (!app.innerHTML.includes('data-action="message-view" data-value="all"') || !app.innerHTML.includes('data-action="message-view" data-value="unread"') || app.innerHTML.includes('浙里办推送') || app.innerHTML.includes('系统消息')) errors.push('浙里办消息筛选未调整为全部和未读');
+  click({ action: 'message-view', value: 'unread' });
+  if (!app.innerHTML.includes('飞行计划信息待补充') || app.innerHTML.includes('低空安全培训报名成功')) errors.push('浙里办未读消息筛选失败');
+  visit('#/feedback');
+  if (['办理说明', '办理状态', '办理回复', '反馈编号', '是否允许联系', '我的反馈', 'feedback-detail'].some((text) => app.innerHTML.includes(text))) errors.push('浙里办意见反馈仍包含办理功能或历史留痕');
+  if (!app.innerHTML.includes('提交意见反馈') || !app.innerHTML.includes('反馈类型') || !app.innerHTML.includes('图片附件') || !app.innerHTML.includes('multiple') || !app.innerHTML.includes('id="feedback-form"') || app.innerHTML.includes('请按表单字段填写，提交的信息将用于服务优化') || app.innerHTML.includes('填写反馈')) errors.push('浙里办信息收集表单或多图上传字段缺失');
+  uploadFeedback();
+  if (!app.innerHTML.includes('已选择 2 张') || !app.innerHTML.includes('反馈图片 2.jpg')) errors.push('浙里办多图上传选择反馈缺失');
+  click({ action: 'submit-feedback' });
+  if (!app.innerHTML.includes('反馈已提交') || ['待办理', '办理状态', '办理回复', '我的反馈'].some((text) => app.innerHTML.includes(text))) errors.push('浙里办反馈信息收集提交结果不正确');
+  visit('#/certificates');
+  if (!app.innerHTML.includes('上传登记证照片') || !app.innerHTML.includes('data-action="open-certificate-upload"') || app.innerHTML.includes('识别登记证载明的 11 项信息，确认后自动更新无人机台账。') || app.innerHTML.includes('certificate-intro') || app.innerHTML.includes('class="page-title"')) errors.push('UOM 登记证上传识别入口或精简说明不正确');
+  if (app.innerHTML.includes('certificate-thumb') || app.innerHTML.includes('安巡 H20')) errors.push('个人登记证列表仍展示截图缩略图或未按角色隔离');
+  click({ action: 'modal', modal: 'certificate' });
+  if (!app.innerHTML.includes('accept="image/png,image/jpeg"') || !app.innerHTML.includes('上传后自动识别登记证字段')) errors.push('UOM 登记证图片上传控件缺失');
+  upload('application/pdf');
+  if (!app.innerHTML.includes('图片格式无法识别')) errors.push('UOM 登记证错误格式未显示反馈');
+  upload('image/png', 11 * 1024 * 1024);
+  if (!app.innerHTML.includes('图片超过 10 MB')) errors.push('UOM 登记证超限图片未显示反馈');
+  upload();
+  if (!app.innerHTML.includes('识别完成') || !app.innerHTML.includes('登记标志') || !app.innerHTML.includes('最大起飞重量') || !app.innerHTML.includes('注册日期')) errors.push('UOM 登记证 OCR 字段确认页缺失');
+  input('issuedTo', '<img src=x onerror=alert(1)>');
+  click({ action: 'confirm-ocr' });
+  if (!app.innerHTML.includes('DJI Avata') || !app.innerHTML.includes('识别信息已保存')) errors.push('UOM 登记证 OCR 确认后未自动新增设备台账');
+  const createdCertificateId = app.innerHTML.match(/data-kind="certificate" data-id="([^"]+)"/u)?.[1];
+  if (createdCertificateId) visit(`#/detail/certificate/${createdCertificateId}`);
+  if (app.innerHTML.includes('<img src=x onerror=alert(1)>') || !app.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;')) errors.push('UOM OCR 可编辑字段未安全转义');
+  if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','本证发给','联系手机','状态','注册日期','上传时间'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('归集更新时间') || app.innerHTML.includes('登记材料')) errors.push('用户端 UOM 登记证详情字段未按证载信息展示');
+  if (!app.innerHTML.includes('certificate-field-image') || !app.innerHTML.includes('登记证截图') || !app.innerHTML.includes('certificate-field')) errors.push('用户端登记证详情未将截图作为底部字段展示');
+  if (app.innerHTML.includes('变更记录') || app.innerHTML.includes('暂无变更记录')) errors.push('用户端登记证详情仍展示变更记录区块');
+  click({ action: 'back', fallback: 'certificates' });
+  if (!app.innerHTML.includes('上传登记证照片') || !app.innerHTML.includes('data-action="open-certificate-upload"')) errors.push('用户端 UOM 详情返回未回到来源列表');
+  visit('#/certificates');
+  if (!app.innerHTML.includes('data-action="request-cancel-certificate"') || !app.innerHTML.includes('data-action="update-certificate"') || !app.innerHTML.includes('danger-text')) errors.push('有效登记证缺少更新或红色注销入口');
+  click({ action: 'filter-status' });
+  if (!app.innerHTML.includes('查看全部') || !app.innerHTML.includes('已注销')) errors.push('浙里办登记证筛选交互失败');
+  visit('#/drones');
+  if (app.innerHTML.includes('由 UOM 登记证自动生成') || app.innerHTML.includes('管理登记证') || app.innerHTML.includes('sync-banner') || !app.innerHTML.includes('登记标志')) errors.push('无人机台账仍展示已移除的 UOM 同步提示');
+  if (!app.innerHTML.includes('data-action="open-drone-create"') || !app.innerHTML.includes('新增设备') || !app.innerHTML.includes('filter-bar--with-action')) errors.push('无人机列表缺少搜索旁新增设备入口');
+  if (!['有效','持有设备','使用设备'].every((label) => app.innerHTML.includes(label)) || ['在册','待核查'].some((label) => app.innerHTML.includes(label)) || app.innerHTML.includes('source-chip">UOM 登记证自动生成')) errors.push('无人机卡片标签未收敛为有效/已注销与持有/使用设备');
+  click({ action: 'open-drone-create' });
+  if (!app.innerHTML.includes('新增设备') || !['航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型'].every((field) => app.innerHTML.includes(field))) errors.push('新增设备表单字段不完整');
+  inputDrone('manufacturerModel', 'X1 / 某制造商');
+  inputDrone('serialNumber', 'SN-****-9901');
+  inputDrone('aircraftName', '云巡新机 X1');
+  inputDrone('emptyWeight', '0.88 kg');
+  inputDrone('maxTakeoffWeight', '0.88 kg');
+  changeDrone('aircraftType', '多旋翼航空器');
+  click({ action: 'submit-drone-create' });
+  if (!app.innerHTML.includes('云巡新机 X1') || !app.innerHTML.includes('待关联') || !app.innerHTML.includes('设备已保存')) errors.push('新增设备保存后未出现在列表或以待关联状态展示');
+  const createdMatch = app.innerHTML.match(/data-action="detail" data-kind="drone" data-id="(DR-[^"]+)"[^>]*>详情<\/button><\/article>/u);
+  const createdId = createdMatch?.[1];
+  if (!createdId) errors.push('新增设备后无法定位列表行');
+  else {
+    click({ action: 'detail', kind: 'drone', id: createdId });
+    if (!app.innerHTML.includes('云巡新机 X1') || !app.innerHTML.includes('上传登记证关联') || !app.innerHTML.includes('待关联')) errors.push('待关联设备详情缺少上传登记证关联入口');
+    click({ action: 'bind-certificate', id: createdId });
+    if (!app.innerHTML.includes('UOM 登记证 OCR') && !app.innerHTML.includes('上传后自动识别')) errors.push('待关联设备上传登记证关联未打开 OCR');
+    upload();
+    input('registrationMark', 'UAS03****99');
+    input('serialNumber', 'SN-****-9901');
+    input('aircraftName', '云巡新机 X1');
+    click({ action: 'confirm-ocr' });
+    if (!app.innerHTML.includes('设备台账已自动更新') && !app.innerHTML.includes('识别信息已保存')) errors.push('待关联设备绑定登记证后缺少成功反馈');
+  }
+  visit('#/drones');
+  click({ action: 'detail', kind: 'drone', id: 'DR-001' });
+  if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','登记状态','注册日期'].every((field) => app.innerHTML.includes(field))) errors.push('用户端无人机详情字段未与 UOM 登记证统一');
+  if (app.innerHTML.includes('变更记录') || app.innerHTML.includes('暂无变更记录')) errors.push('用户端无人机详情仍展示变更记录区块');
+  click({ action: 'back', fallback: 'drones' });
+  if (!app.innerHTML.includes('持有设备') || !app.innerHTML.includes('搜索产品名称、登记标志或序号')) errors.push('用户端无人机详情返回未回到来源列表');
+  click({ action: 'group', value: '使用设备' });
+  if (!app.innerHTML.includes('使用设备') || app.innerHTML.includes('持有设备</p>')) errors.push('浙里办设备分组交互失败');
+  visit('#/profile');
+  if (!app.innerHTML.includes('my-account-hero') || !app.innerHTML.includes('account-mark personal') || !app.innerHTML.includes('个人账户（') || !app.innerHTML.includes('data-go="profile-details"') || !['飞行执照','我的无人机','我的飞行申报','我报名的活动','意见反馈'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('>个人资料</b>') || ['身份证号','手机号码','飞行执照图片'].some((field) => app.innerHTML.includes(field))) errors.push('个人“我的”账户首页或服务入口未按要求重构');
+  if (!app.innerHTML.includes('profile-entry-list') || !app.innerHTML.includes('my-account-page') || !app.innerHTML.includes('id="account-services-title">我的') || app.innerHTML.includes('my-service-grid') || app.innerHTML.includes('资料管理') || app.innerHTML.includes('账户服务') || app.innerHTML.includes('我的服务') || app.innerHTML.includes('退出登录') || app.innerHTML.includes('data-action="logout"')) errors.push('“我的”页应为统一“我的”入口且不含旧分区标题或退出登录');
+  if (!app.innerHTML.includes('鄞州云航服务有限公司')) errors.push('个人账户有所属公司时应在摘要展示公司名称');
+  if (app.innerHTML.includes('account-chip">已同步') || app.innerHTML.includes('管理个人资料、飞行执照与常用服务')) errors.push('个人账户摘要仍展示已同步或说明文案');
+  click({ go: 'drones' });
+  if (!app.innerHTML.includes('持有设备') || !app.innerHTML.includes('data-action="group"')) errors.push('个人“我的无人机”服务入口跳转失败');
+  visit('#/profile');
+  click({ action: 'open-my-activities' });
+  if (!app.innerHTML.includes('data-action="activity-filter"') || !app.innerHTML.includes('查看全部')) errors.push('个人“我报名的活动”服务入口跳转或筛选失败');
+  visit('#/profile');
+  click({ go: 'profile-details' });
+  if (!app.innerHTML.includes('个人基本信息') || app.innerHTML.includes('class="page-title"') || !['姓名','身份证号','手机号码','所属公司','所属地','紧急联系人','紧急联系电话'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('<span>地址</span>') || app.innerHTML.includes('常用飞行区域')) errors.push('个人资料二级页字段缺失、仍带大标题栏或不含地址');
+  if (app.innerHTML.includes('刷新同步') || app.innerHTML.includes('基本信息来自浙里办账号同步') || app.innerHTML.includes('编辑个人信息') || app.innerHTML.includes('data-modal="profile"') || app.innerHTML.includes('认证状态') || app.innerHTML.includes('同步状态') || app.innerHTML.includes('选填项，用于区级低空安全服务联络')) errors.push('个人资料仍展示应去掉的功能介绍或本地编辑入口');
+  visit('#/flights');
+  click({ action: 'open-flight-create' });
+  if (!app.innerHTML.includes('持有设备') || !app.innerHTML.includes('使用设备') || !app.innerHTML.includes('鄞州云航服务有限公司')) errors.push('新增飞行计划设备选项未区分持有/使用或未带所属公司');
+  click({ action: 'close-modal' });
+  visit('#/profile');
+  click({ action: 'modal', modal: 'supplement' });
+  if (!app.innerHTML.includes('编辑个人补充信息')) errors.push('个人补充信息编辑入口缺失');
+  if (!['所属地', '紧急联系人', '紧急联系电话', '请选择鄞州区街道', '下应街道', 'data-supplement-field="district"'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('常用飞行区域') || app.innerHTML.includes('usualArea')) errors.push('个人补充信息字段未调整为所属地街道下拉与紧急联系人电话');
+  if (app.innerHTML.includes('字段口径待业务确认') || app.innerHTML.includes('选填项，仅用于区级')) errors.push('个人补充信息弹窗不应展示字段口径说明');
+  click({ action: 'close-modal' });
+  visit('#/profile-license');
+  if (app.innerHTML.includes('class="page-title"') || !app.innerHTML.includes('飞行执照图片')) errors.push('飞行执照二级页缺失或仍带大标题栏');
+  click({ action: 'modal', modal: 'license' });
+  if (!app.innerHTML.includes('id="license-file"') || !app.innerHTML.includes('选择执照图片')) errors.push('飞行执照图片上传控件缺失');
+  upload('application/pdf', 1024, 'license-file');
+  if (!app.innerHTML.includes('请上传 JPG 或 PNG 格式的执照图片')) errors.push('飞行执照错误格式反馈缺失');
+  upload('image/png', 11 * 1024 * 1024, 'license-file');
+  if (!app.innerHTML.includes('执照图片超过 10 MB')) errors.push('飞行执照超限图片反馈缺失');
+  upload('image/png', 1024, 'license-file', '飞行执照.png');
+  if (!app.innerHTML.includes('已选择的飞行执照图片')) errors.push('飞行执照图片预览缺失');
+  click({ action: 'save-license' });
+  if (!app.innerHTML.includes('飞行执照图片已保存') || !app.innerHTML.includes('已上传') || !app.innerHTML.includes('license-thumb') || !app.innerHTML.includes('已上传的飞行执照照片')) errors.push('飞行执照图片保存后缩略图缺失');
+  visit('#/login');
+  click({ action: 'login', value: 'company' });
+  visit('#/home');
+  if (!['飞手管理', '飞行计划管理', 'UOM 登记证管理', '无人机管理'].every((label) => app.innerHTML.includes(label)) || app.innerHTML.includes('UOM平台申报指引') || app.innerHTML.includes('UOM平台流程指导') || !['quick-card--profile-pilots', 'quick-card--flights', 'quick-card--certificates', 'quick-card--drones'].every((className) => app.innerHTML.includes(className))) errors.push('企业首页常用服务应为飞手管理、飞行计划管理、UOM 登记证管理、无人机管理');
+  visit('#/services');
+  if (!app.innerHTML.includes('飞手管理') || !app.innerHTML.includes('quick-card--profile-pilots') || !app.innerHTML.includes('quick-icon amber') || app.innerHTML.includes('企业资料与授权账号') === false) errors.push('企业全部服务未加入飞手管理或色系未区分');
+  if (!app.innerHTML.includes('飞行计划管理') || !app.innerHTML.includes('UOM 登记证管理')) errors.push('企业全部服务未使用飞行计划管理或 UOM 登记证管理命名');
+  visit('#/profile');
+  if (!app.innerHTML.includes('my-account-hero') || !app.innerHTML.includes('account-mark company') || !app.innerHTML.includes('企业账户（') || !app.innerHTML.includes('data-go="profile-details"') || !['关联用户','飞手管理','飞行计划管理','UOM 登记证管理','无人机管理'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('>企业资料</b>') || app.innerHTML.includes('飞行申报管理') || app.innerHTML.includes('我报名的活动') || app.innerHTML.includes('统一社会信用代码')) errors.push('企业“我的”账户首页或服务入口未按要求重构');
+  if (app.innerHTML.includes('account-chip">已同步') || app.innerHTML.includes('管理企业飞手、飞行计划、登记证与无人机')) errors.push('企业账户摘要仍展示已同步或说明文案');
+  if (!app.innerHTML.includes('profile-entry-icon amber')) errors.push('企业“我的”中飞手管理色系未与其他入口区分');
+  if (!app.innerHTML.includes('5 条待执行 · 共 7 条') || app.innerHTML.includes('查看本公司计划')) errors.push('企业“我的”飞行计划管理应展示待执行与合计 mock 数量');
+  if (app.innerHTML.includes('my-service-grid') || app.innerHTML.includes('意见反馈') || app.innerHTML.includes('退出登录')) errors.push('企业“我的”仍保留双列服务卡、意见反馈或退出登录');
+  click({ go: 'profile-pilots' });
+  if (app.innerHTML.includes('class="page-title"') || !app.innerHTML.includes('企业飞手管理') || !app.innerHTML.includes('王女士') || !app.innerHTML.includes('周先生') || app.innerHTML.includes('赵先生（演示）')) errors.push('企业飞手管理列表应仅展示飞手且无二级大标题栏');
+  click({ action: 'pilot-detail', id: 'MEM-01' });
+  if (app.innerHTML.includes('class="page-title"') || !app.innerHTML.includes('飞手信息') || !app.innerHTML.includes('安巡 H20') || !app.innerHTML.includes('农田灌溉设施巡检') || !app.innerHTML.includes('使用设备')) errors.push('企业飞手详情未展示使用设备或飞行计划，或仍带二级大标题栏');
+  click({ action: 'back', fallback: 'profile-pilots' });
+  if (!app.innerHTML.includes('企业飞手管理')) errors.push('飞手详情返回未回到飞手列表');
+  visit('#/drones');
+  if (!['全部', '未注销', '已注销'].every((label) => app.innerHTML.includes(label)) || app.innerHTML.includes('data-value="持有设备"') || app.innerHTML.includes('data-value="使用设备"')) errors.push('企业无人机管理应按全部/未注销/已注销筛选');
+  if (!app.innerHTML.includes('data-action="open-drone-create"') || !app.innerHTML.includes('新增设备')) errors.push('企业无人机列表缺少新增设备入口');
+  click({ action: 'group', value: '已注销' });
+  if (!app.innerHTML.includes('旧设备') || app.innerHTML.includes('安巡 H20')) errors.push('企业无人机已注销筛选失败');
+  click({ action: 'group', value: '未注销' });
+  if (!app.innerHTML.includes('安巡 H20') || app.innerHTML.includes('旧设备（演示）')) errors.push('企业无人机未注销筛选失败');
+  click({ action: 'detail', kind: 'drone', id: 'DR-003' });
+  if (!app.innerHTML.includes('分配飞手') || !app.innerHTML.includes('分配给飞手') && !app.innerHTML.includes('重新分配飞手')) errors.push('企业无人机详情缺少分配飞手入口');
+  click({ action: 'unassign-drone', id: 'DR-003' });
+  if (!app.innerHTML.includes('未分配') || !app.innerHTML.includes('使用设备已减少') && !app.innerHTML.includes('已取消分配')) errors.push('企业取消分配飞手失败');
+  click({ action: 'modal', modal: 'assign-pilot', id: 'DR-003' });
+  if (!app.innerHTML.includes('分配给飞手') || !app.innerHTML.includes('选择飞手')) errors.push('企业分配飞手弹窗缺失');
+  change({ assignField: 'pilotId' }, 'MEM-02');
+  click({ action: 'submit-assign-pilot' });
+  if (!app.innerHTML.includes('已分配给周先生') && !app.innerHTML.includes('使用设备已更新')) errors.push('企业分配飞手保存反馈缺失');
+  visit('#/profile-pilot/MEM-02');
+  if (!app.innerHTML.includes('安巡 H20') || !app.innerHTML.includes('使用设备')) errors.push('分配后飞手使用设备未增加');
+  visit('#/profile-pilot/MEM-01');
+  if (!app.innerHTML.includes('暂无使用设备') || !app.innerHTML.includes('<span>使用设备</span><b>0 架</b>')) errors.push('取消分配后原飞手使用设备未减少');
+  visit('#/profile');
+  click({ go: 'profile-details' });
+  if (!app.innerHTML.includes('企业基本信息') || app.innerHTML.includes('class="page-title"') || !app.innerHTML.includes('统一社会信用代码') || app.innerHTML.includes('刷新同步') || app.innerHTML.includes('基本信息来自浙里办账号同步') || app.innerHTML.includes('编辑企业信息') || app.innerHTML.includes('data-modal="company-profile"') || app.innerHTML.includes('选填项，用于区级低空安全服务联络')) errors.push('企业资料仍展示应去掉的功能介绍、大标题栏或本地编辑入口');
+  click({ action: 'modal', modal: 'company-supplement' });
+  if (!app.innerHTML.includes('编辑企业补充信息')) errors.push('企业补充信息编辑入口缺失');
+  click({ action: 'close-modal' });
+  visit('#/profile-members');
+  if (app.innerHTML.includes('class="page-title"') || !app.innerHTML.includes('企业关联用户管理') || !app.innerHTML.includes('王女士') || !app.innerHTML.includes('周先生') || !app.innerHTML.includes('赵先生') || !app.innerHTML.includes('郑先生') || app.innerHTML.includes('添加关联用户') || app.innerHTML.includes('data-modal="member"')) errors.push('企业关联用户二级页应仅展示列表，不提供新增入口或大标题栏');
+  if (!app.innerHTML.includes('is-disabled') || !app.innerHTML.includes('status neutral">已停用')) errors.push('关联用户已停用未置灰或状态色不正确');
+  if (!app.innerHTML.includes('设置飞手') || !app.innerHTML.includes('飞手') || app.innerHTML.includes('管理员 · 飞手') || app.innerHTML.includes('配置标签')) errors.push('关联用户应仅由法人设置飞手，且法人本人不展示标签');
+  click({ action: 'modal', modal: 'member-pilot', id: 'MEM-03' });
+  if (!app.innerHTML.includes('设置飞手') || !app.innerHTML.includes('pilot-switch') || !app.innerHTML.includes('data-tag-field="isPilot"') || app.innerHTML.includes('data-tag-field="isAdmin"') || app.innerHTML.includes('管理员')) errors.push('设置飞手弹窗应使用开关且不含管理员');
+  click({ action: 'submit-member-pilot' });
+  if (!app.innerHTML.includes('已设为飞手') && !app.innerHTML.includes('已取消飞手')) errors.push('设置飞手保存反馈缺失');
+  visit('#/flights');
+  if (app.innerHTML.includes('新增飞行计划') || app.innerHTML.includes('批量导入') || app.innerHTML.includes('data-action="edit-flight"') || app.innerHTML.includes('data-action="execute"')) errors.push('企业飞行计划仍提供新增、导入或修改执行入口');
+  if (!app.innerHTML.includes('提交人') || !app.innerHTML.includes('王女士') || !app.innerHTML.includes('农田灌溉设施巡检')) errors.push('企业飞行计划未展示本公司计划或提交人');
+  visit('#/detail/flight/FP-20260801-007');
+  if (!app.innerHTML.includes('农田灌溉设施巡检') || !app.innerHTML.includes('提交人') || app.innerHTML.includes('修改计划') || app.innerHTML.includes('确认执行') || app.innerHTML.includes('变更记录') || app.innerHTML.includes('鄞州区河道巡检与隐患复核')) errors.push('法人用户飞行计划详情未按角色隔离、只读查看或展示不符合要求');
+  visit('#/certificates');
+  if (!app.innerHTML.includes('安巡 H20') || app.innerHTML.includes('certificate-thumb') || app.innerHTML.includes('云翼 M30') || app.innerHTML.includes('巡航 Mini')) errors.push('法人用户登记证台账未按角色隔离或列表仍展示截图缩略图');
+  visit('#/drones');
+  if (!app.innerHTML.includes('安巡 H20') || app.innerHTML.includes('云翼 M30')) errors.push('法人用户无人机台账未按角色隔离');
+  if (app.innerHTML.includes('登录与账号') || app.innerHTML.includes('data-go="login-info"')) errors.push('浙里办全部服务仍展示已移除的登录与账号模块');
+  const routes = {profile:'我的',certificates:'上传登记证照片',drones:'搜索产品名称、登记标志或序号',knowledge:'法律法规',guides:'UOM 平台操作手册',messages:'全部标为已读',feedback:'提交意见反馈'};
+  Object.entries(routes).forEach(([name, heading]) => {
+    visit(`#/${name}`);
+    if (!app.innerHTML.includes(heading)) errors.push(`浙里办模块路由失败：${name}`);
+    if (!app.innerHTML.includes('mobile-app-title">鄞州低空智护')) errors.push(`手机端模块页缺少通用顶栏：${name}`);
+    if (app.innerHTML.includes('class="page-title"')) errors.push(`服务页仍保留大标题栏：${name}`);
+    if (app.innerHTML.includes('data-action="role"') || app.innerHTML.includes('切换登录类型')) errors.push(`用户端页面不应提供身份切换：${name}`);
+    if (/(?:静态原型|静态交互原型|mock|演示|模拟)/iu.test(app.innerHTML)) errors.push(`用户端出现非最终呈现文案：${name}`);
+  });
+});
+
+runtime('apps/zheliban/app.js', '#/home', ({ app, click, visit }) => {
+  if (!app.innerHTML.includes('选择登录类型')) errors.push('刷新业务路由后未显示登录入口');
+  click({ action: 'login', value: 'personal' });
+  if (!app.innerHTML.includes('让每一次起飞') || app.innerHTML.includes('选择登录类型')) errors.push('刷新业务路由后的同 hash 登录未进入首页');
+  if (!app.innerHTML.includes('mobile-chrome') || !app.innerHTML.includes('mobile-app-bar') || !app.innerHTML.includes('mobile-app-title">鄞州低空智护') || !app.innerHTML.includes('mobile-back') || !app.innerHTML.includes('mobile-more') || !app.innerHTML.includes('mobile-status-bar')) errors.push('手机端缺少通用顶栏组件「鄞州低空智护」');
+  if (app.innerHTML.includes('class="brand"') || app.innerHTML.includes('mobile-header')) errors.push('手机端不应再使用旧版 brand/mobile-header 顶栏');
+  if (!app.innerHTML.includes('bottom-nav') || app.innerHTML.includes('desktop-chrome')) errors.push('默认手机端预览未使用底部导航');
+  if (app.innerHTML.includes('data-action="logout"') || app.innerHTML.includes('退出登录')) errors.push('用户端不应提供退出登录');
+  click({ action: 'set-viewport', value: 'desktop' });
+  if (!app.innerHTML.includes('desktop-chrome') || !app.innerHTML.includes('top-nav') || app.innerHTML.includes('bottom-nav') || app.innerHTML.includes('mobile-chrome') || app.innerHTML.includes('mobile-header') || app.innerHTML.includes('is-overlay') || /class="hero"[\s\S]*?desktop-chrome/u.test(app.innerHTML)) errors.push('切换 PC 端后首页应使用独立白色顶栏，导航不得叠在 Banner 上');
+  if (app.innerHTML.includes('data-action="logout"') || app.innerHTML.includes('退出登录')) errors.push('PC 端不应提供退出登录');
+  click({ action: 'set-viewport', value: 'mobile' });
+  if (!app.innerHTML.includes('bottom-nav') || !app.innerHTML.includes('mobile-chrome') || app.innerHTML.includes('desktop-chrome')) errors.push('切回手机端后未恢复底部导航与通用顶栏');
+  visit('#/profile');
+  if (!app.innerHTML.includes('profile-entry-list') || !app.innerHTML.includes('my-account-page') || !app.innerHTML.includes('id="account-services-title">我的') || app.innerHTML.includes('my-service-grid') || app.innerHTML.includes('账户服务')) errors.push('“我的”页未合并为统一“我的”入口');
+  visit('#/login');
+  if (!app.innerHTML.includes('选择登录类型')) errors.push('再次打开登录页失败');
+});
+
+const legacyLedger = JSON.parse(browserStorage.get('yinzhou-uom-ledger-v1') || 'null');
+const legacyCertificate = legacyLedger?.certificates?.find((item) => item.id === 'UOM-****-26');
+if (legacyCertificate) {
+  delete legacyCertificate.certificateImageUrl;
+  delete legacyCertificate.certificateImageName;
+  browserStorage.set('yinzhou-uom-ledger-v1', JSON.stringify(legacyLedger));
+}
+
+browserStorage.delete('yinzhou-public-service-v2');
+browserStorage.set('yinzhou-public-service-v2', JSON.stringify({
+  feedbacks: [
+    { id: 'FB-SYNC-001', category: '功能建议', title: '未命名反馈', content: '用户端提交后同步至后台的反馈（mock）', time: '2026-08-04 14:36', fields: {}, attachments: {} },
+    { id: 'FB-202607-008', category: '功能建议', title: '希望增加活动报名提醒', content: '建议在活动开始前通过浙里办消息提醒已报名用户。', time: '2026-07-28 16:20', fields: {}, attachments: {} }
+  ]
+}));
+runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, inputDraft, changeDraft, inputLogin }) => {
+  const readCaptcha = () => {
+    const match = app.innerHTML.match(/class="admin-login-captcha"[^>]*>([\s\S]*?)<\/button>/);
+    if (!match) return '';
+    return (match[1].match(/<i[^>]*>([^<]*)<\/i>/g) || []).map((item) => item.replace(/<[^>]+>/g, '')).join('');
+  };
+  if (!app.innerHTML.includes('账号登录') || !app.innerHTML.includes('进入管理平台') || !app.innerHTML.includes('admin-login') || !app.innerHTML.includes('验证码') || !app.innerHTML.includes('admin-login-captcha') || !app.innerHTML.includes('V1.0.0')) errors.push('后台登录页渲染失败');
+  if (app.innerHTML.includes('全要素台账') || app.innerHTML.includes('飞行监管') || app.innerHTML.includes('侦测协同') || app.innerHTML.includes('统一掌握无人机台账')) errors.push('后台登录页仍保留已移除的左侧能力说明');
+  if (app.innerHTML.includes('side-scroll') || app.innerHTML.includes('鄞州低空治理工作台')) errors.push('未登录时不应进入后台业务壳层');
+  click({ action: 'admin-login' });
+  if (!app.innerHTML.includes('请输入账号、密码和验证码') && !app.innerHTML.includes('admin-login-error')) errors.push('后台登录缺省字段未提示校验');
+  inputLogin('password', 'admin123');
+  click({ action: 'admin-login' });
+  if (!app.innerHTML.includes('请输入账号、密码和验证码') && !app.innerHTML.includes('admin-login-error')) errors.push('后台登录缺少验证码未提示校验');
+  const firstCaptcha = readCaptcha();
+  if (!/^[A-Z0-9]{4}$/.test(firstCaptcha)) errors.push('后台登录验证码未生成');
+  click({ action: 'refresh-captcha' });
+  const refreshedCaptcha = readCaptcha();
+  if (!/^[A-Z0-9]{4}$/.test(refreshedCaptcha)) errors.push('后台登录验证码刷新失败');
+  inputLogin('captcha', firstCaptcha === refreshedCaptcha ? refreshedCaptcha : 'XXXX');
+  if (firstCaptcha !== refreshedCaptcha) {
+    click({ action: 'admin-login' });
+    if (!app.innerHTML.includes('验证码不正确')) errors.push('后台登录错误验证码未提示');
+  }
+  inputLogin('password', 'admin123');
+  inputLogin('captcha', readCaptcha());
+  click({ action: 'admin-login' });
+  visit('#/dashboard');
+  if (!app.innerHTML.includes('鄞州低空治理工作台')) errors.push('后台登录后未进入工作台');
+  if (!app.innerHTML.includes('退出登录') || !app.innerHTML.includes('综合管理员')) errors.push('后台顶栏缺少退出登录或管理员信息');
+  click({ action: 'logout' });
+  if (!app.innerHTML.includes('确认退出登录') || !app.innerHTML.includes('data-action="submit-logout"')) errors.push('后台退出登录确认弹窗失败');
+  click({ action: 'submit-logout' });
+  if (!app.innerHTML.includes('账号登录') || !app.innerHTML.includes('进入管理平台') || !app.innerHTML.includes('验证码')) errors.push('退出登录后未回到登录页');
+  visit('#/users');
+  if (!app.innerHTML.includes('账号登录') || app.innerHTML.includes('>用户管理</h1>')) errors.push('未登录访问业务路由未回落登录页');
+  inputLogin('account', 'admin');
+  inputLogin('password', 'admin123');
+  inputLogin('captcha', readCaptcha());
+  click({ action: 'admin-login' });
+  visit('#/dashboard');
+  if (!app.innerHTML.includes('鄞州低空治理工作台')) errors.push('后台重新登录后工作台渲染失败');
+  if (!['个人用户', '企业用户', '在册无人机', '飞行计划', '飞行区域分布', '执照数据', '近 7 日飞行计划', 'line-chart', 'line-chart-values'].every((item) => app.innerHTML.includes(item))) errors.push('后台工作台未按数据统计口径展示指标、区域分布、执照或折线图');
+  if (app.innerHTML.includes('class="line-chart-value"')) errors.push('后台折线数值仍使用可被拉伸的 SVG text');
+  if (!app.innerHTML.includes('已上传执照') || !app.innerHTML.includes('未上传执照') || app.innerHTML.includes('个人用户已上传') || app.innerHTML.includes('企业授权人员已上传') || app.innerHTML.includes('待补充执照')) errors.push('工作台执照数据应仅统计已上传与未上传数量');
+  if (!app.innerHTML.includes('license-stat-grid--stack') || !app.innerHTML.includes('占应持有') || !app.innerHTML.includes('license-stat-mini')) errors.push('工作台执照数据未按纵向双卡铺满排版');
+  if (app.innerHTML.includes('+12.4%') || app.innerHTML.includes('status success">+12')) errors.push('后台工作台近 7 日飞行计划仍展示环比涨幅标签');
+  if (!app.innerHTML.includes('data-action="dashboard-pick"') || !app.innerHTML.includes('metric-card is-interactive')) errors.push('后台工作台缺少指标卡或图表点击交互');
+  if (!['近一周', '一月', '一年', '自选时间段', 'data-action="dashboard-area-range"'].every((item) => app.innerHTML.includes(item))) errors.push('后台工作台飞行区域分布缺少时间段筛选');
+  click({ action: 'dashboard-area-range', range: 'month' });
+  if (!app.innerHTML.includes('飞行区域分布已切换为一月') && !app.innerHTML.includes('当前统计时间段：一月')) errors.push('后台工作台时间段筛选切换失败');
+  if (!app.innerHTML.includes('>142<') && !app.innerHTML.includes('142</b>')) errors.push('后台工作台切换一月后区域分布数据未更新');
+  click({ action: 'dashboard-area-range', range: 'custom' });
+  if (!app.innerHTML.includes('data-area-date="start"') || !app.innerHTML.includes('data-area-date="end"')) errors.push('后台工作台自选时间段未展示日期选择');
+  click({ action: 'dashboard-pick', kind: 'trend', id: '08-03', value: '28', label: '08-03' });
+  if (!app.innerHTML.includes('08-03 飞行计划 28 项') && !app.innerHTML.includes('line-chart-point is-active')) errors.push('后台工作台折线数据点点击反馈失败');
+  if (app.innerHTML.includes('需要处理的事项') || app.innerHTML.includes('快捷入口') || app.innerHTML.includes('常用管理') || app.innerHTML.includes('今日飞行计划分布') || app.innerHTML.includes('查看统计分析') || app.innerHTML.includes('data-go="statistics"')) errors.push('后台工作台仍保留待关注、快捷入口或已移除的统计分析跳转');
+  if (app.innerHTML.includes('data-group="数据统计分析"') || /nav-group-toggle[^>]*>[\s\S]*?数据统计分析/u.test(app.innerHTML)) errors.push('后台侧栏仍保留已移除的数据统计分析模块');
+  visit('#/statistics');
+  if (!app.innerHTML.includes('鄞州低空治理工作台') || app.innerHTML.includes('导出统计报表')) errors.push('旧统计路由未回退工作台或仍渲染独立统计页');
+  if (app.innerHTML.includes('方案外参考') || app.innerHTML.includes('nav-badge')) errors.push('后台侧栏仍展示方案外参考模块');
+  const removedRoutes = { situation: '低空态势', 'detection-devices': '侦测设备', watchlists: '黑白名单', fences: '电子围栏', disposal: '处置日志', 'detect-stats': '侦测统计' };
+  Object.entries(removedRoutes).forEach(([name, title]) => {
+    visit(`#/${name}`);
+    if (app.innerHTML.includes(`>${title}<`) || app.innerHTML.includes('鄞州区低空运行态势') || app.innerHTML.includes('肩灯感知自动比对闭环') || app.innerHTML.includes('侦测数据统计')) errors.push(`后台已移除的方案外路由仍渲染：${name}`);
+  });
+  visit('#/alerts');
+  if (!app.innerHTML.includes('侦测预警') || app.innerHTML.includes('方案外') || app.innerHTML.includes('查看处置日志')) errors.push('后台侦测预警页面缺失、仍含方案外文案或处置日志入口');
+  if (app.innerHTML.includes('反制接口状态')) errors.push('后台仍展示建设方案范围外的反制接口');
+  visit('#/drones');
+  click({ action: 'request-change', key: 'drones', id: 'DR-001' });
+  if (!app.innerHTML.includes('确认禁用设备')) errors.push('后台状态确认弹窗失败');
+  click({ action: 'submit-modal' });
+  if (!app.innerHTML.includes('已禁用') || !app.innerHTML.includes('status muted')) errors.push('后台设备禁用 mock 交互失败或未置灰');
+  if (/data-go="form\/drones\//u.test(app.innerHTML) || /data-modal="edit"[^>]*data-key="drones"/u.test(app.innerHTML)) errors.push('后台无人机管理列表仍展示编辑入口');
+  visit('#/users');
+  change('state-filter', '正常');
+  if (!app.innerHTML.includes('陈先生') || app.innerHTML.includes('李*（演示）')) errors.push('后台状态筛选交互失败或未同步用户端个人信息');
+  if (/<th>发布状态<\/th>/u.test(app.innerHTML)) errors.push('后台用户管理列表不应展示发布状态列');
+  if (/class="page-heading"[\s\S]*?<h1>用户管理<\/h1>\s*<p>/u.test(app.innerHTML) || app.innerHTML.includes('查看个人用户及其设备、UOM 登记证与飞行活动记录。')) errors.push('后台列表页标题下仍展示模块介绍文案');
+  change('state-filter', '全部');
+  visit('#/users');
+  if (/data-go="form\/users\//u.test(app.innerHTML) || app.innerHTML.includes('新增用户') || app.innerHTML.includes('>编辑<')) errors.push('后台用户管理仍展示新建或编辑入口');
+  visit('#/form/users/USR-001');
+  if (!app.innerHTML.includes('用户管理详情') || app.innerHTML.includes('编辑个人信息') || app.innerHTML.includes('data-draft-field="name"')) errors.push('旧用户编辑路由未重定向至只读详情');
+  visit('#/detail/users/USR-001');
+  if (!['基本信息','补充信息','所属地','紧急联系人','紧急联系电话','下应街道'].every((field) => app.innerHTML.includes(field))) errors.push('后台用户详情未按用户端口径展示基本信息与补充信息');
+  if (app.innerHTML.includes('常用飞行区域') || app.innerHTML.includes('timeline-note') || app.innerHTML.includes('字段口径待业务确认，与用户端同屏展示')) errors.push('后台用户详情主区不应展示旧补充字段或口径说明条');
+  if (app.innerHTML.includes('编辑个人信息') || app.innerHTML.includes('data-go="form/users/')) errors.push('后台用户详情仍展示编辑入口');
+  click({ action: 'request-change', key: 'users', id: 'USR-001' });
+  if (!app.innerHTML.includes('确认拉黑') || !app.innerHTML.includes('确认对“陈先生') || !app.innerHTML.includes('拉黑原因') || !app.innerHTML.includes('data-draft-field="reason"') || !app.innerHTML.includes('data-action="submit-blacklist"')) errors.push('后台用户拉黑弹窗未按用户名确认文案或缺少必填拉黑原因');
+  if (app.innerHTML.includes('确认对“USR-001”')) errors.push('拉黑弹窗仍使用编号而非用户名');
+  inputDraft('reason', '违规飞行治理');
+  click({ action: 'submit-blacklist' });
+  if (!app.innerHTML.includes('已拉黑')) errors.push('后台用户拉黑提交反馈缺失');
+  if (!app.innerHTML.includes('拉黑原因') || !app.innerHTML.includes('确认对“') || !app.innerHTML.includes('执行拉黑')) errors.push('右侧页面说明未写明拉黑弹窗用户名文案与原因必填');
+  visit('#/blacklist');
+  if (!app.innerHTML.includes('违规飞行治理') || !app.innerHTML.includes('陈先生')) errors.push('用户拉黑后未同步写入黑名单原因记录');
+  if (!app.innerHTML.includes('操作人') || !app.innerHTML.includes('操作时间')) errors.push('黑名单列表缺少操作人或操作时间列');
+  click({ action: 'request-change', key: 'blacklist', id: 'BL-001' });
+  if (!app.innerHTML.includes('确认取消拉黑') || !app.innerHTML.includes('确认对“用户甲”执行取消拉黑')) errors.push('取消拉黑弹窗未按对象名称展示确认文案');
+  if (app.innerHTML.includes('确认对“BL-001”') || app.innerHTML.includes('data-draft-field="operatedBy"') || app.innerHTML.includes('data-draft-field="operatedAt"') || />操作人<\/span><b>/.test(app.innerHTML) || />操作时间<\/span><b>/.test(app.innerHTML)) errors.push('取消拉黑弹窗不应展示操作人/操作时间或仍提供手填');
+  click({ action: 'submit-unblacklist' });
+  if (!app.innerHTML.includes('已取消拉黑')) errors.push('取消拉黑提交反馈缺失');
+  visit('#/blacklist');
+  if (!app.innerHTML.includes('综合管理员')) errors.push('取消拉黑后操作人未回写列表');
+  if (!app.innerHTML.includes('弹窗不展示') && !app.innerHTML.includes('自动记录')) errors.push('右侧页面说明未写明操作人/操作时间系统记录且弹窗不展示');
+  visit('#/companies');
+  if (!app.innerHTML.includes('鄞州云航服务有限公司')) errors.push('后台企业档案未展示用户端企业信息');
+  if (!/<th>企业名称<\/th>/u.test(app.innerHTML) || !/<th>账号数<\/th>/u.test(app.innerHTML) || !/<th>设备数<\/th>/u.test(app.innerHTML) || !/<th>状态<\/th>/u.test(app.innerHTML)) errors.push('后台企业管理列表缺少企业名称、账号数、设备数或状态列');
+  if (/<th>发布状态<\/th>/u.test(app.innerHTML) || app.innerHTML.includes('>发布状态<')) errors.push('后台企业管理列表不应展示发布状态列');
+  if (/data-go="form\/companies\//u.test(app.innerHTML) || app.innerHTML.includes('新增企业') || app.innerHTML.includes('>编辑<')) errors.push('后台企业管理仍展示新建或编辑入口');
+  visit('#/detail/companies/ENT-001');
+  if (!app.innerHTML.includes('王女士') || !app.innerHTML.includes('周先生') || !app.innerHTML.includes('赵先生') || !app.innerHTML.includes('是否飞手') || !app.innerHTML.includes('安巡 H20') || !app.innerHTML.includes('授权经办人') || !['基本信息','补充信息','无人机主要用途','安全负责人','安全负责人电话'].every((field) => app.innerHTML.includes(field))) errors.push('后台企业详情未展示关联用户、飞手分配或补充信息字段');
+  if (app.innerHTML.includes('<th>管理员</th>')) errors.push('后台企业授权账号不应再展示管理员列');
+  if (app.innerHTML.includes('同步状态')) errors.push('后台企业详情不应再展示同步状态');
+  if (app.innerHTML.includes('字段口径待业务确认，与用户端同屏展示')) errors.push('后台企业详情主区不应展示补充信息口径说明条');
+  if (app.innerHTML.includes('编辑企业信息') || app.innerHTML.includes('data-go="form/companies/')) errors.push('后台企业详情仍展示编辑入口');
+  visit('#/form/companies/ENT-001');
+  if (!app.innerHTML.includes('企业管理详情') || app.innerHTML.includes('编辑企业信息') || app.innerHTML.includes('data-draft-field="name"')) errors.push('旧企业编辑路由未重定向至只读详情');
+  visit('#/certificates');
+  if (!app.innerHTML.includes('登记标志') || !app.innerHTML.includes('序号') || !app.innerHTML.includes('登记状态') || !app.innerHTML.includes('DJI Avata') || !app.innerHTML.includes('UAS03****26') || app.innerHTML.includes('UOM 登记证图片') || app.innerHTML.includes('未上传')) errors.push('后台 UOM 登记证台账未按用户端申请数据展示或遗留数据丢失');
+  if (!app.innerHTML.includes('页面说明') || !app.innerHTML.includes('页面概述') || app.innerHTML.includes('toggle-certificate-help')) errors.push('后台 UOM 登记证缺少统一页面说明或仍保留旧证书说明入口');
+  const certificateCancelCount = (app.innerHTML.match(/data-action="request-change" data-key="certificates"/gu) || []).length;
+  if (!app.innerHTML.includes('<option>有效</option>') || !app.innerHTML.includes('<option>已注销</option>') || certificateCancelCount < 7) errors.push('后台 UOM 登记证状态筛选或注销操作状态不正确');
+  change('state-filter', '有效');
+  if (!app.innerHTML.includes('云翼 M30') || !app.innerHTML.includes('巡航 Mini') || !app.innerHTML.includes('备机 R2') || !app.innerHTML.includes('瞰界 P4') || app.innerHTML.includes('旧设备</td>') || app.innerHTML.includes('退役翼龙</td>')) errors.push('后台 UOM 登记证有效状态筛选失败');
+  change('state-filter', '已注销');
+  if (!app.innerHTML.includes('旧设备') || !app.innerHTML.includes('退役翼龙') || app.innerHTML.includes('备机 R2') || app.innerHTML.includes('云翼 M30') || app.innerHTML.includes('巡航 Mini')) errors.push('后台 UOM 登记证已注销状态筛选失败');
+  change('state-filter', '全部');
+  if (app.innerHTML.includes('data-modal="edit"') && /data-modal="edit"[^>]*data-item="UOM-OCR-\d+"/u.test(app.innerHTML) || /\s*[（(]\s*[）)]/u.test(app.innerHTML)) errors.push('后台 UOM 登记证台账仍展示无效编辑入口或空括号');
+  if (app.innerHTML.includes('识别状态') || app.innerHTML.includes('识别成功') || app.innerHTML.includes('待更新')) errors.push('后台 UOM 登记证台账仍展示旧识别或旧状态口径');
+  if (app.innerHTML.includes('<img src=x onerror=alert(1)>') || !app.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;')) errors.push('后台 UOM 登记证台账未安全转义用户端 OCR 字段');
+  visit('#/detail/certificates/UOM-****-44');
+  if (app.innerHTML.includes('data-action="request-change" data-key="certificates"')) errors.push('后台已注销登记证详情仍展示手动注销操作');
+  visit('#/detail/certificates/UOM-****-26');
+  if (!app.innerHTML.includes('../../shared/assets/uom-registration-certificate.svg') || !app.innerHTML.includes('certificate-attachment-image')) errors.push('后台 UOM 登记证遗留台账未补齐表格版式脱敏登记证图片');
+  visit('#/certificates');
+  const ocrId = (app.innerHTML.match(/UOM-OCR-\d+/u) || ['UOM-OCR-1'])[0];
+  visit(`#/detail/certificates/${ocrId}`);
+  if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','本证发给','联系手机','状态','注册日期','登记证图片'].every((field) => app.innerHTML.includes(field)) || !app.innerHTML.includes('certificate-attachment-image') || !app.innerHTML.includes('data:image/png;base64,AA==') || app.innerHTML.includes('未上传')) errors.push('后台 UOM 登记证详情未展示用户端申请图片');
+  if (app.innerHTML.includes('编辑登记信息')) errors.push('后台 UOM 登记证详情仍展示无效编辑入口');
+  visit('#/detail/drones/DR-001');
+  if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','登记状态','注册日期','设备分组','管理状态'].every((field) => app.innerHTML.includes(field))) errors.push('后台无人机详情字段未与 UOM 登记证及用户端分组口径统一');
+  if (app.innerHTML.includes('data-modal="edit"') || app.innerHTML.includes('编辑登记信息') || app.innerHTML.includes('data-go="form/drones/')) errors.push('后台无人机详情仍展示编辑入口');
+  visit('#/flights');
+  if (!app.innerHTML.includes('任务性质') || !app.innerHTML.includes('飞行设备') || !app.innerHTML.includes('执行状态')) errors.push('后台飞行计划列表未展示用户端对齐字段');
+  if (app.innerHTML.includes('>发布状态<') || /<th>发布状态<\/th>/u.test(app.innerHTML)) errors.push('后台飞行计划列表误展示发布状态列');
+  if (!app.innerHTML.includes('未执行') || !app.innerHTML.includes('已确认执行')) errors.push('后台飞行计划列表执行状态未按未执行/已确认执行展示');
+  if (/data-go="form\/flights\//u.test(app.innerHTML)) errors.push('后台飞行计划列表仍展示编辑入口');
+  visit('#/detail/flights/FP-20260803-018');
+  if (!['飞行活动类型','任务性质','操控模式','飞行模式','通信联络方式','最大飞行高度','起降备降场地','审批材料','计划状态','执行状态','执行时间','提交人','修改历史与执行记录'].every((field) => app.innerHTML.includes(field))) errors.push('后台飞行计划详情未按用户端口径展示字段');
+  if (app.innerHTML.includes('编辑飞行计划') || app.innerHTML.includes('data-action="submit-flight"') || /data-action="request-change"[^>]*data-key="flights"/u.test(app.innerHTML) || />查看执行</u.test(app.innerHTML)) errors.push('后台飞行计划详情仍提供字段编辑或查看执行');
+  visit('#/detail/flights/FP-20260728-006');
+  if (!app.innerHTML.includes('2026-07-28 15:20') || !app.innerHTML.includes('陈先生')) errors.push('已确认执行的飞行计划详情未展示执行时间或提交人');
+  visit('#/interface');
+  if (!app.innerHTML.includes('待接入') || !app.innerHTML.includes('市级低空飞行服务管理平台') || !app.innerHTML.includes('鄞州智巡车防一体化系统') || !app.innerHTML.includes('肩灯厂商侦测平台') || app.innerHTML.includes('反制控制接口')) errors.push('后台外部接口未按建设方案三项对接展示');
+  visit('#/form/activities/new');
+  if (!app.innerHTML.includes('新建活动') || !app.innerHTML.includes('admin-rich-editor') || !app.innerHTML.includes('报名表单字段配置') || !app.innerHTML.includes('form-page')) errors.push('后台活动新建未使用独立表单页与共用富文本');
+  if (!app.innerHTML.includes('enroll-field-table') || !app.innerHTML.includes('提示文案') || !app.innerHTML.includes('下拉选项') || /绑定子表单<\/|data-action="bind-sub-?form"/u.test(app.innerHTML)) errors.push('后台活动报名字段配置未按独立表格形态实现（或仍含绑定子表单）');
+  if (!['文本', '下拉框', '手机号'].every((type) => app.innerHTML.includes(`data-type="${type}"`)) || app.innerHTML.includes('data-type="图片"')) errors.push('后台活动报名字段类型应为文本/下拉框/手机号，不应含图片');
+  visit('#/form/activities/ACT-01');
+  if (!app.innerHTML.includes('is-locked') || /data-action="save-enroll-fields"/u.test(app.innerHTML)) errors.push('已有报名的活动编辑页未锁定报名表单字段配置');
+  if (!app.innerHTML.includes('已有用户提交过报名') || !app.innerHTML.includes('不可编辑')) errors.push('右侧页面说明未写明有报名后字段不可编辑');
+  visit('#/form/activities/ACT-03');
+  if (!/data-action="save-enroll-fields"/u.test(app.innerHTML) || !app.innerHTML.includes('单独保存')) errors.push('无报名记录的活动编辑页未提供字段单独保存，或右侧说明未写明单独保存');
+  if (app.innerHTML.includes('enroll-field-note')) errors.push('报名表单字段配置不应在主界面展示规则说明条，应写入右侧页面说明');
+  visit('#/detail/activities/ACT-01');
+  if (!['活动开始时间','报名开始时间','活动介绍','本场报名名单','报名确认状态','报名人','查看填写内容'].every((field) => app.innerHTML.includes(field))) errors.push('后台活动二级页面缺失活动详情或未直接展示报名名单');
+  if (!app.innerHTML.includes('data-go="form/activities/ACT-01"')) errors.push('后台活动详情缺少独立表单编辑入口');
+  if (app.innerHTML.includes('查看报名名单') && app.innerHTML.includes('data-action="view-enrollments"')) errors.push('活动详情仍使用点击后打开名单弹窗的入口');
+  if (!app.innerHTML.includes('一键确认') || !app.innerHTML.includes('data-action="confirm-activity-enrollments"') || !app.innerHTML.includes('报名人')) errors.push('活动详情未直接展示报名名单或一键确认');
+  if (!app.innerHTML.includes('data-action="view-enrollment-form"') || app.innerHTML.includes('data-go="detail/enrollments/')) errors.push('报名名单内查看填写内容应改为弹窗入口，不应跳转详情页');
+  click({ action: 'view-enrollment-form', id: 'ENR-ACT-01' });
+  if (!app.innerHTML.includes('填写内容') || !app.innerHTML.includes('报名表单填写内容') || !app.innerHTML.includes('关闭')) errors.push('后台查看填写内容弹窗缺失');
+  if (!['报名人', '联系电话', '陈先生'].every((field) => app.innerHTML.includes(field))) errors.push('填写内容弹窗未展示报名表单字段');
+  click({ action: 'close-modal' });
+  if (!app.innerHTML.includes('本场报名名单') || !app.innerHTML.includes('一键确认')) errors.push('关闭填写内容弹窗后详情名单未保留');
+  visit('#/detail/enrollments/ENR-ACT-01');
+  if (!['活动报名详情','关联活动','报名人','报名表单填写内容'].every((field) => app.innerHTML.includes(field))) errors.push('后台活动报名二级页面缺失表单填写内容');
+  if (app.innerHTML.includes('data-action="request-change" data-key="enrollments"')) errors.push('报名详情仍提供单条确认，应改为详情页名单一键确认');
+  visit('#/activities');
+  change('state-filter', '全部');
+  if (!app.innerHTML.includes('活动管理') || !app.innerHTML.includes('已报名/名额') || !app.innerHTML.includes('报名确认状态')) errors.push('活动管理页缺少已报名/名额或报名确认状态列');
+  if (!['报名中', '进行中', '已结束', '已下架'].every((state) => app.innerHTML.includes(state))) errors.push('活动管理 mock 未覆盖四种活动状态');
+  if (!app.innerHTML.includes('status warning') || !app.innerHTML.includes('status info') || !app.innerHTML.includes('status muted') || !app.innerHTML.includes('status danger')) errors.push('活动状态未使用四色散标（报名中/进行中/已结束/已下架）');
+  if (!app.innerHTML.includes('查看报名名单') || !app.innerHTML.includes('data-go="detail/activities/')) errors.push('活动列表缺少进入详情查看报名名单的入口');
+  if (app.innerHTML.includes('确认报名名单') && !app.innerHTML.includes('一键确认')) errors.push('活动列表不应再使用旧的确认报名名单文案');
+  if (!app.innerHTML.includes('页面说明') || !app.innerHTML.includes('活动状态 · 报名中') || !app.innerHTML.includes('活动状态 · 进行中') || !app.innerHTML.includes('活动状态 · 已结束') || !app.innerHTML.includes('活动状态 · 已下架') || !app.innerHTML.includes('报名确认状态') || !app.innerHTML.includes('不可再报名')) errors.push('右侧页面说明未写明活动状态四色与报名确认状态规则');
+  visit('#/detail/activities/ACT-01');
+  click({ action: 'confirm-activity-enrollments', id: 'ACT-01' });
+  click({ action: 'submit-enrollment-batch' });
+  if (!app.innerHTML.includes('用户端不可再报名') && !app.innerHTML.includes('报名确认状态已锁定')) errors.push('一键确认后缺少关闭报名反馈');
+  {
+    const saved = (() => { try { return JSON.parse(browserStorage.get('yinzhou-public-service-v2') || 'null'); } catch { return null; } })();
+    const act = saved?.activities?.find((item) => item.id === 'ACT-01');
+    if (!act || act.confirmState !== '已确认') errors.push('一键确认后活动报名确认状态未锁定为已确认');
+  }
+  visit('#/activities');
+  if (!app.innerHTML.includes('页面说明') || !app.innerHTML.includes('页面概述') || !app.innerHTML.includes('操作逻辑') || !app.innerHTML.includes('字段说明')) errors.push('后台页面缺少可折叠右侧页面说明');
+  click({ action: 'toggle-help' });
+  if (!app.innerHTML.includes('page-help-rail') || !app.innerHTML.includes('说明')) errors.push('页面说明收起态缺失');
+  click({ action: 'toggle-help' });
+  if (!app.innerHTML.includes('页面概述')) errors.push('页面说明展开态恢复失败');
+  visit('#/detail/news/NEWS-01');
+  if (!app.innerHTML.includes('新闻公告详情') || !app.innerHTML.includes('低空安全宣传月活动安排公告')) errors.push('后台新闻公告二级页面缺失');
+  visit('#/laws');
+  if (!app.innerHTML.includes('无人驾驶航空器飞行安全提示') || !app.innerHTML.includes('排序') || !app.innerHTML.includes('下架') || /<th>内容标签<\/th>/u.test(app.innerHTML) || app.innerHTML.includes('飞行前必读') || app.innerHTML.includes('已置顶') || app.innerHTML.includes('toggle-content-pin') || /<th>图文\/视频<\/th>/u.test(app.innerHTML)) errors.push('后台法规内容库缺少排序或仍保留置顶/图文视频列');
+  visit('#/form/laws/LAW-01');
+  if (!app.innerHTML.includes('封面') || !app.innerHTML.includes('content-cover-file') || !app.innerHTML.includes('发布状态') || !app.innerHTML.includes('sort-stepper') || !app.innerHTML.includes('生效开始日期') || !app.innerHTML.includes('生效结束日期') || !app.innerHTML.includes('发布单位') || !app.innerHTML.includes('admin-rich-editor')) errors.push('后台法规独立表单缺少发布单位、生效起止日期、排序或封面富文本');
+  if (app.innerHTML.includes('置顶设置') || app.innerHTML.includes('data-draft-field="pinned"')) errors.push('后台法规表单仍保留置顶设置');
+  if (app.innerHTML.includes('data-draft-field="mediaType"') || /<label>图文\/视频/.test(app.innerHTML) || /<label>视频时长/.test(app.innerHTML)) errors.push('后台法规表单不应再区分图文/视频形态');
+  if (!app.innerHTML.includes('video/mp4') || !app.innerHTML.includes('支持 JPG、PNG、MP4、WebM') || !app.innerHTML.includes('选择文件')) errors.push('后台法规封面未支持图片/视频上传');
+  if (!app.innerHTML.includes('data-draft-field="effectiveStart"') || !app.innerHTML.includes('data-draft-field="effectiveEnd"') || !app.innerHTML.includes('type="date"')) errors.push('后台法规生效起止未使用日期选择');
+  if (!app.innerHTML.includes('data-draft-field="sort"') || !app.innerHTML.includes('data-action="sort-step"')) errors.push('后台法规排序步进器缺失');
+  visit('#/form/news/NEWS-01');
+  if (app.innerHTML.includes('data-draft-field="mediaType"') || /<label>图文\/视频/.test(app.innerHTML) || app.innerHTML.includes('置顶设置') || app.innerHTML.includes('data-draft-field="pinned"')) errors.push('后台新闻表单不应再区分图文/视频或保留置顶');
+  if (!app.innerHTML.includes('video/mp4') || !app.innerHTML.includes('选择文件') || !app.innerHTML.includes('sort-stepper')) errors.push('后台新闻封面或排序步进器缺失');
+  visit('#/news');
+  if (!app.innerHTML.includes('排序') || app.innerHTML.includes('已置顶') || app.innerHTML.includes('toggle-content-pin') || /<th>图文\/视频<\/th>/u.test(app.innerHTML)) errors.push('后台新闻列表未改为排序或仍保留置顶/图文视频列');
+  visit('#/laws');
+  if (!app.innerHTML.includes('生效起止') || !app.innerHTML.includes('2026-07-21 至 2027-07-20')) errors.push('后台法规列表未展示生效起止区间');
+  visit('#/detail/laws/LAW-01');
+  if (!app.innerHTML.includes('生效 2026-07-21 至 2027-07-20')) errors.push('后台法规详情未展示生效起止');
+  visit('#/laws');
+  if (!app.innerHTML.includes('删除') || !app.innerHTML.includes('text-btn danger')) errors.push('后台法规列表缺少危险色删除操作');
+  visit('#/guides');
+  if (!app.innerHTML.includes('页面说明') || !app.innerHTML.includes('编号排序') || !app.innerHTML.includes('上架/下架') || app.innerHTML.includes('操作说明图')) errors.push('右侧页面说明未同步操作手册上架下架与编号排序口径');
+  visit('#/detail/guides/GUIDE-01');
+  if (!app.innerHTML.includes('操作手册详情') || !app.innerHTML.includes('流程标题') || !app.innerHTML.includes('编号排序') || !app.innerHTML.includes('图文说明') || !app.innerHTML.includes('编辑流程') || !app.innerHTML.includes('上架') || app.innerHTML.includes('操作说明图')) errors.push('后台操作手册二级页面未按 guides 条目展示');
+  visit('#/guides');
+  if (!app.innerHTML.includes('新建流程') || !app.innerHTML.includes('删除') || !app.innerHTML.includes('form/guides/new') || !app.innerHTML.includes('编号排序') || !app.innerHTML.includes('上架') || !app.innerHTML.includes('下架') || app.innerHTML.includes('下架指引') || app.innerHTML.includes('操作说明图')) errors.push('后台 UOM 流程指导缺少新建、上架/下架或编号排序');
+  if (!app.innerHTML.includes('status danger') || !app.innerHTML.includes('已下架') || !app.innerHTML.includes('status success') || !app.innerHTML.includes('已发布')) errors.push('后台操作手册发布状态未用颜色区分');
+  visit('#/form/guides/GUIDE-01');
+  if (!app.innerHTML.includes('admin-rich-editor') || !app.innerHTML.includes('编号排序') || !app.innerHTML.includes('sort-stepper') || app.innerHTML.includes('操作说明图') || app.innerHTML.includes('<option>视频</option>')) errors.push('后台 UOM 流程指导独立表单缺少富文本/编号排序或仍含操作说明图');
+  visit('#/faq');
+  if (!app.innerHTML.includes('图文解答（富文本）') || !app.innerHTML.includes('排序') || app.innerHTML.includes('内容形式') || app.innerHTML.includes('类别</th>') || !app.innerHTML.includes('删除')) errors.push('后台 FAQ 列表未与用户端问题和解答字段一一对应或缺少删除/排序');
+  if (app.innerHTML.includes('faq-config-note') || app.innerHTML.includes('用户端展示规则')) errors.push('后台 FAQ 主区不应展示用户端展示规则说明条，应写入右侧页面说明');
+  if ((!app.innerHTML.includes('仅“已发布”内容在用户端可见') && !app.innerHTML.includes('仅已发布内容在用户端可见')) || !app.innerHTML.includes('排序')) errors.push('右侧页面说明未写明 FAQ 用户端仅展示已发布内容或排序口径');
+  visit('#/form/faq/FAQ-01');
+  if (!app.innerHTML.includes('admin-rich-editor') || !app.innerHTML.includes('保存配置') || !app.innerHTML.includes('排序') || !app.innerHTML.includes('sort-stepper') || app.innerHTML.includes('<option>视频</option>')) errors.push('后台常见问题独立表单缺少富文本或排序');
+  visit('#/faq');
+  if (!app.innerHTML.includes('常见问题分页') || !app.innerHTML.includes('data-action="faq-page"') || !app.innerHTML.includes('FAQ-05')) errors.push('后台常见问题分页控件缺失');
+  click({ action: 'faq-page', page: '2' });
+  if (!app.innerHTML.includes('FAQ-06')) errors.push('后台常见问题分页切换失败');
+  search('无法选择');
+  if (!app.innerHTML.includes('飞行区域无法选择或填写有误怎么办？') || app.innerHTML.includes('什么情况下需要进行飞行活动自主申报？') || !app.innerHTML.includes('共 1 条，第 1/1 页')) errors.push('后台常见问题关键词搜索或搜索后分页重置失败');
+  search('不存在的问题');
+  if (!app.innerHTML.includes('暂无符合条件的问题')) errors.push('后台常见问题搜索空结果反馈缺失');
+  visit('#/detail/feedback/FB-202607-008');
+  if (!app.innerHTML.includes('意见反馈详情') || !app.innerHTML.includes('希望增加活动报名提醒') || ['办理状态', '当前办理回复', '填写办理回复', '回复内容'].some((text) => app.innerHTML.includes(text))) errors.push('后台意见反馈未收敛为信息收集内容查看');
+  visit('#/feedback');
+  {
+    const titles = (() => { try { return JSON.parse(browserStorage.get('yinzhou-public-service-v2') || 'null')?.feedbacks?.map((item) => item.title) || []; } catch { return []; } })();
+    if (!titles.includes('未命名反馈') || !app.innerHTML.includes('反馈内容') || !app.innerHTML.includes('反馈表单管理') || app.innerHTML.includes('反馈内容办理')) errors.push('用户端提交的反馈未同步至后台信息收集列表');
+  }
+  visit('#/sys-users');
+  if (!app.innerHTML.includes('超级管理员') || !app.innerHTML.includes('用户名称') || !app.innerHTML.includes('手机号码') || !app.innerHTML.includes('系统管理') || !app.innerHTML.includes('＋ 新增')) errors.push('系统管理用户页未对齐筛选、工具栏与用户列表');
+  visit('#/accounts');
+  if (!app.innerHTML.includes('超级管理员') || !app.innerHTML.includes('用户昵称') || !app.innerHTML.includes('sys-toolbar')) errors.push('旧账号路由未重定向到系统用户管理');
+  visit('#/roles');
+  if (!app.innerHTML.includes('权限字符') || !app.innerHTML.includes('活动运营') || !app.innerHTML.includes('请输入角色名称')) errors.push('系统管理角色页缺失');
+  visit('#/menus');
+  if (!app.innerHTML.includes('保存排序') || !app.innerHTML.includes('展开/折叠') || !app.innerHTML.includes('组件路径') || !app.innerHTML.includes('意见反馈管理') || !app.innerHTML.includes('系统管理')) errors.push('系统管理菜单树表未对齐');
+  visit('#/messages');
+  if (!app.innerHTML.includes('浙里办推送') || !app.innerHTML.includes('系统推送') || !app.innerHTML.includes('消息类型') || !app.innerHTML.includes('推送人') || !app.innerHTML.includes('消息内容') || !app.innerHTML.includes('推送时间')) errors.push('后台消息管理字段未按标题/内容/推送时间/类型/状态/推送人调整');
+  if (!app.innerHTML.includes('未推送') || !app.innerHTML.includes('已推送')) errors.push('后台消息管理缺少未推送/已推送状态');
+  visit('#/form/messages/new');
+  if (!app.innerHTML.includes('新建用户消息') || !app.innerHTML.includes('消息类型') || !app.innerHTML.includes('消息内容') || !app.innerHTML.includes('推送人') || !app.innerHTML.includes('未推送') || !app.innerHTML.includes('系统推送') || !app.innerHTML.includes('推送时间')) errors.push('后台消息新建表单字段未对齐');
+  visit('#/volunteers');
+  if (!app.innerHTML.includes('RID') || !app.innerHTML.includes('form/volunteers/new') || !app.innerHTML.includes('已配发')) errors.push('后台志愿者管理缺少 RID 配发状态或新建表单入口');
+  visit('#/rid-modules');
+  if (!app.innerHTML.includes('RID-YZ-001') || !app.innerHTML.includes('RID模块') || app.innerHTML.includes('RID模块配发')) errors.push('后台 RID 模块列表标题或入口不正确');
+  if (!app.innerHTML.includes('设备序列号') || !app.innerHTML.includes('设备型号') || !app.innerHTML.includes('更新时间') || !app.innerHTML.includes('新增RID')) errors.push('后台 RID 模块缺少序列号、型号、更新时间或新增入口');
+  if (app.innerHTML.includes('>维修中<') || app.innerHTML.includes('<th>回收时间</th>') || app.innerHTML.includes('>配发登记<')) errors.push('后台 RID 模块仍含维修中、双时间列或旧配发登记主按钮');
+  if (!app.innerHTML.includes('status info') || !app.innerHTML.includes('在库') || !app.innerHTML.includes('status success') || !app.innerHTML.includes('已配发')) errors.push('后台 RID 在库/已配发状态色未区分');
+  click({ action: 'modal', modal: 'create-rid' });
+  if (!app.innerHTML.includes('新增RID') || !app.innerHTML.includes('data-draft-field="sn"') || !app.innerHTML.includes('data-draft-field="model"')) errors.push('后台新增 RID 弹窗字段缺失');
+  click({ action: 'close-modal' });
+  visit('#/shoulder-lights');
+  if (!app.innerHTML.includes('配发状态筛选') || !app.innerHTML.includes('设备编号') || !app.innerHTML.includes('配发台账') || !app.innerHTML.includes('维护台账')) errors.push('后台肩灯配发缺少状态筛选或台账页签');
+  if (!app.innerHTML.includes('领用人') || !app.innerHTML.includes('新增肩带') || !app.innerHTML.includes('配发登记')) errors.push('后台肩灯配发缺少新增肩带主按钮或行内配发入口');
+  click({ action: 'modal', modal: 'create-light' });
+  if (!app.innerHTML.includes('新增肩带') || !app.innerHTML.includes('data-draft-field="id"')) errors.push('后台新增肩带弹窗缺失');
+  click({ action: 'close-modal' });
+  visit('#/feedback');
+  click({ action: 'feedback-tab', value: 'forms' });
+  visit('#/form/feedback-forms/FORM-01');
+  if (!app.innerHTML.includes('<option>多选</option>') || !app.innerHTML.includes('form-page')) errors.push('后台反馈表单独立页缺少多选或表单页壳');
+  visit('#/verification');
+  if (!['核查编号', '设备名称', '登记标志', '权属', '核查类型', '核查结果', '核查日期', '核查人'].every((field) => app.innerHTML.includes(field)) || !app.innerHTML.includes('搜索核查编号、设备名称或登记标志') || !['通过', '不通过', '待补充'].every((opt) => app.innerHTML.includes(opt))) errors.push('设备核查列表字段或查询筛选不正确');
+  if (app.innerHTML.includes('通信联络人') && app.innerHTML.includes('计划时间') && app.innerHTML.includes('>说明<')) errors.push('设备核查列表仍使用旧通用列口径');
+  visit('#/form/verification/new');
+  if (!['关联设备', '核查类型', '核查方式', '核查地点', '核查结果', '问题描述', '处理意见', '计划跟进日期', '保存核查'].every((field) => app.innerHTML.includes(field))) errors.push('设备核查新增表单字段不正确');
+  if (app.innerHTML.includes('核查对象/设备') || (app.innerHTML.includes('核查编号') && app.innerHTML.includes('data-draft-field="id"'))) errors.push('设备核查新增表单不应与列表字段完全统一');
+  const routes = {users:'用户管理',companies:'企业管理',blacklist:'黑名单','sys-users':'用户管理',roles:'角色管理',menus:'菜单管理',dicts:'字典管理',certificates:'UOM 登记证',verification:'设备核查',flights:'飞行计划',activities:'活动管理',laws:'低空安全普法',news:'新闻公告',guides:'操作手册',faq:'常见问题',volunteers:'志愿者名册',['rid-modules']:'RID模块',messages:'消息管理',feedback:'意见反馈',['shoulder-lights']:'肩灯配发',alerts:'侦测预警',interface:'外部接口'};
+  Object.entries(routes).forEach(([name, heading]) => {
+    visit(`#/${name}`);
+    if (!app.innerHTML.includes(heading) || /(?:静态原型|静态交互原型|原型|mock|模拟|演示)/iu.test(app.innerHTML)) errors.push(`后台模块路由或交付文案不符合要求：${name}`);
+  });
+});
+
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click }) => {
+  click({ action: 'login', value: 'personal' });
+  visit('#/profile-details');
+  if (!app.innerHTML.includes('138****2408') || !app.innerHTML.includes('陈先生')) errors.push('用户端个人资料未展示 mock 基本信息');
+});
+
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click }) => {
+  click({ action: 'login', value: 'company' });
+  visit('#/profile-details');
+  if (!app.innerHTML.includes('139****1682') || !app.innerHTML.includes('鄞州云航服务有限公司') || app.innerHTML.includes('同步状态')) errors.push('用户端企业资料未展示 mock 基本信息或仍含同步状态');
+});
+
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click }) => {
+  click({ action: 'login', value: 'personal' });
+  visit('#/feedback');
+  if (app.innerHTML.includes('是否允许联系') || !app.innerHTML.includes('图片附件') || !app.innerHTML.includes('multiple') || !app.innerHTML.includes('id="feedback-form"')) errors.push('旧版意见反馈缓存未迁移为仅信息收集的多图上传表单');
+}, {
+  'yinzhou-public-service-v2': {
+    feedbacks: [{ id: 'FB-OLD', category: '功能建议', title: '旧版反馈', content: '旧版缓存', time: '2026-08-03 10:00', fields: { '是否允许联系': '允许通过浙里办预留方式联系' } }],
+    feedbackForms: [{ id: 'FORM-OLD', name: '旧版意见反馈表', scene: '意见反馈', fields: [['反馈标题', '文本', '必填'], ['是否允许联系', '单选', '选填'], ['图片附件', '图片', '选填']], state: '已发布', updated: '2026-08-03 10:00' }]
+  }
+});
+
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, upload }) => {
+  click({ action: 'login', value: 'personal' });
+  visit('#/certificates');
+  if (!app.innerHTML.includes('data-action="request-cancel-certificate"') || !app.innerHTML.includes('danger-text')) errors.push('有效登记证缺少红色注销入口');
+  click({ action: 'request-cancel-certificate', id: 'UOM-****-81' });
+  if (!app.innerHTML.includes('上传注销登记证') || !app.innerHTML.includes('上传 UOM 已注销登记证照片') || !app.innerHTML.includes('accept="image/png,image/jpeg"')) errors.push('登记证注销未进入上传 UOM 登记证流程');
+  upload();
+  if (!app.innerHTML.includes('识别完成') || !app.innerHTML.includes('确认注销') || !app.innerHTML.includes('>已注销<')) errors.push('注销登记证 OCR 核对页缺失或未锁定已注销状态');
+  click({ action: 'confirm-ocr' });
+  if (!app.innerHTML.includes('登记证已注销，关联设备台账已同步')) errors.push('登记证上传注销未提供同步反馈');
+  visit('#/drones');
+  if (!app.innerHTML.includes('class="status neutral">已注销') || app.innerHTML.includes('source-chip">UOM 登记证自动生成')) errors.push('注销登记证后无人机卡片未以灰色已注销状态展示或仍展示来源标签');
+  click({ action: 'detail', kind: 'drone', id: 'DR-001' });
+  if (!app.innerHTML.includes('设备类型') || !app.innerHTML.includes('设备状态') || !app.innerHTML.includes('已注销') || app.innerHTML.includes('台账状态')) errors.push('无人机详情未与卡片统一设备状态和类型口径');
+});
+
+if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; } else console.log('两端路由与关键 mock 交互运行时检查通过。');

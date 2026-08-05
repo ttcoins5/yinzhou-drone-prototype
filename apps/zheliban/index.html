@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="鄞州低空智护用户端，支持浙江省政务服务网与浙里办 APP 访问。" />
+    <title>鄞州低空智护 · 用户端</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="viewport-stage" data-viewport="mobile">
+      <div class="viewport-toolbar" role="toolbar" aria-label="预览模式切换">
+        <span class="viewport-toolbar-label">预览模式</span>
+        <div class="viewport-switch" role="group" aria-label="设备形态">
+          <button type="button" class="viewport-option is-active" data-action="set-viewport" data-value="mobile" aria-pressed="true">手机端</button>
+          <button type="button" class="viewport-option" data-action="set-viewport" data-value="desktop" aria-pressed="false">PC 端</button>
+        </div>
+      </div>
+      <div class="viewport-frame">
+        <main id="app" class="phone-shell viewport-mobile" aria-live="polite"></main>
+      </div>
+    </div>
+    <script src="../../shared/data/mock-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1400" role="img" aria-labelledby="title desc">
+  <title id="title">飞行活动自主申报操作说明</title>
+  <desc id="desc">登录平台、选择航空器、填写飞行信息、提交并查询的操作流程图</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eff8ff"/><stop offset="1" stop-color="#f8fbff"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#126eae"/><stop offset="1" stop-color="#2c9bc2"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#16527a" flood-opacity=".12"/></filter>
+  </defs>
+  <rect width="900" height="1400" rx="36" fill="url(#bg)"/>
+  <path d="M-40 240 C220 40 430 170 940 0 M-30 390 C250 160 580 320 940 130" fill="none" stroke="#bde4f5" stroke-width="5" opacity=".65"/>
+  <text x="70" y="112" fill="#12385b" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="40" font-weight="700">飞行活动自主申报</text>
+  <text x="70" y="164" fill="#2774a7" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="24">操作说明 · 以 UOM 平台最新页面为准</text>
+  <g filter="url(#shadow)">
+    <rect x="60" y="220" width="780" height="470" rx="28" fill="#fff"/><rect x="90" y="255" width="720" height="78" rx="18" fill="url(#blue)"/>
+    <circle cx="130" cy="294" r="18" fill="#9be1ef"/><text x="164" y="304" fill="#fff" font-family="sans-serif" font-size="24" font-weight="700">UOM · 飞行活动自主申报</text>
+    <rect x="110" y="370" width="680" height="64" rx="14" fill="#edf7fd"/><text x="140" y="410" fill="#54728f" font-family="sans-serif" font-size="22">申报主体：个人用户 / 企业用户</text>
+    <rect x="110" y="460" width="320" height="64" rx="14" fill="#e4f3fb"/><text x="140" y="500" fill="#176aa4" font-family="sans-serif" font-size="22" font-weight="700">选择已登记航空器</text>
+    <rect x="460" y="460" width="330" height="64" rx="14" fill="#e4f3fb"/><text x="490" y="500" fill="#176aa4" font-family="sans-serif" font-size="22" font-weight="700">填写飞行活动信息</text>
+    <rect x="110" y="550" width="680" height="88" rx="16" fill="#f6fbfe" stroke="#c6e4f3" stroke-width="2"/><text x="140" y="588" fill="#54728f" font-family="sans-serif" font-size="20">核对信息与附件后提交，在“我的申报”查询结果</text><text x="140" y="620" fill="#1780b5" font-family="sans-serif" font-size="20" font-weight="700">提交前请确认时间、区域、目的和联系人</text>
+  </g>
+  <path d="M450 720 v62" stroke="#2c9bc2" stroke-width="6" stroke-linecap="round"/><path d="m430 762 20 24 20-24" fill="none" stroke="#2c9bc2" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="70" y="850" fill="#12385b" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="30" font-weight="700">填写信息时请重点核对</text>
+  <g font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="24" font-weight="700" fill="#12385b">
+    <rect x="60" y="900" width="370" height="118" rx="22" fill="#fff" stroke="#c8e3f2" stroke-width="2"/><text x="90" y="956" fill="#176aa4" font-size="20">01</text><text x="150" y="950">开始 / 结束时间</text><text x="150" y="984" fill="#54728f" font-size="18" font-weight="400">年月日 + 具体时分</text>
+    <rect x="470" y="900" width="370" height="118" rx="22" fill="#fff" stroke="#c8e3f2" stroke-width="2"/><text x="500" y="956" fill="#176aa4" font-size="20">02</text><text x="560" y="950">飞行区域</text><text x="560" y="984" fill="#54728f" font-size="18" font-weight="400">宁波市鄞州区 + 街道</text>
+    <rect x="60" y="1040" width="370" height="118" rx="22" fill="#fff" stroke="#c8e3f2" stroke-width="2"/><text x="90" y="1096" fill="#176aa4" font-size="20">03</text><text x="150" y="1090">飞行目的</text><text x="150" y="1124" fill="#54728f" font-size="18" font-weight="400">按实际用途手工填写</text>
+    <rect x="470" y="1040" width="370" height="118" rx="22" fill="#fff" stroke="#c8e3f2" stroke-width="2"/><text x="500" y="1096" fill="#176aa4" font-size="20">04</text><text x="560" y="1090">设备与联系人</text><text x="560" y="1124" fill="#54728f" font-size="18" font-weight="400">选择设备，补充现场信息</text>
+  </g>
+  <rect x="60" y="1220" width="780" height="92" rx="20" fill="#126eae"/><text x="110" y="1275" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="23" font-weight="700">提示：页面字段和办理规则以 UOM 平台实时提示为准</text>
+</svg>

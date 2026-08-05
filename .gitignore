@@ -1,0 +1,24 @@
+# GitHub repository contains only the shareable static prototype and Pages workflow.
+*
+!.gitignore
+!index.html
+!README.md
+!.github/
+!.github/workflows/
+!.github/workflows/pages.yml
+!apps/
+!apps/admin/
+!apps/admin/**
+apps/admin/docs/
+!apps/zheliban/
+!apps/zheliban/**
+!shared/
+!shared/**
+!scripts/
+!scripts/prototype-test-check.mjs
+
+# Never publish operating-system metadata or editable source material.
+.DS_Store
+~$*
+.~*
+*.inspect.ndjson

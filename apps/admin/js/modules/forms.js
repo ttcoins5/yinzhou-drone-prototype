@@ -1,0 +1,230 @@
+/* 后台独立表单页：各模块新建/编辑 */
+(function (global) {
+  const UI = () => global.AdminUI;
+  const RE = () => global.AdminRichEditor;
+  const FP = () => global.AdminFormPage;
+
+  const normalizeField = (row) => (UI()?.normalizeEnrollField ? UI().normalizeEnrollField(row) : [...(Array.isArray(row) ? row : [])]);
+  const defaultEnrollFields = () => [
+    normalizeField(['报名人', '文本', '必填', '请填写报名人', '']),
+    normalizeField(['联系电话', '手机号', '必填', '请填写手机号', '']),
+    normalizeField(['备注', '文本', '选填', '选填，可补充说明', ''])
+  ];
+
+  const loadDraft = (key, id, data, state) => {
+    const isNew = !id || id === 'new';
+    if (key === 'activities') {
+      const src = isNew ? null : data.activities.find((a) => a.id === id);
+      return src
+        ? { title: src.title, startTime: src.startTime, endTime: src.endTime, enrollStart: src.enrollStart, enrollEnd: src.enrollEnd, place: src.place, capacity: String(src.capacity), summary: src.summary, organizer: src.organizer || '', contact: src.contact || '', richText: Array.isArray(src.richText) ? src.richText.join('\n') : (src.richText || src.summary || ''), fields: (src.enrollForm || defaultEnrollFields()).map(normalizeField) }
+        : { title: '', startTime: '', endTime: '', enrollStart: '', enrollEnd: '', place: '', capacity: '40', summary: '', organizer: '鄞州区低空安全服务中心', contact: '服务咨询 0574-****-8612', richText: '', fields: defaultEnrollFields() };
+    }
+    if (key === 'feedback-forms') {
+      const src = isNew ? null : data.feedbackForms.find((f) => f.id === id);
+      return src ? { name: src.name, scene: src.scene, fields: src.fields.map((row) => [...row]) } : { name: '', scene: '', fields: [['反馈标题', '文本', '必填'], ['详细说明', '多行文本', '必填'], ['图片附件', '多张图片', '选填']] };
+    }
+    if (key === 'guides') {
+      const guides = data.uomGuide.guides || [];
+      const guide = isNew ? null : (guides.find((e) => e.id === id) || guides[0]);
+      const nextSort = guides.reduce((max, row) => Math.max(max, Number(row.sort) || 0), 0) + 1;
+      const sort = Number(guide?.sort) > 0 ? Number(guide.sort) : nextSort;
+      return guide
+        ? { title: guide.title || '', body: guide.richText || '', summary: guide.summary || '', status: guide.status || '已发布', sort, guideId: guide.id || id }
+        : { title: '', body: '', summary: '', status: '已发布', sort: nextSort, guideId: '' };
+    }
+    if (key === 'faq') {
+      const faqs = data.uomGuide.faqs || [];
+      const src = isNew ? null : faqs.find((row) => row.id === id);
+      const nextSort = faqs.reduce((max, row) => Math.max(max, Number(row.sort) || 0), 0) + 1;
+      const sort = Number(src?.sort) > 0 ? Number(src.sort) : nextSort;
+      return src
+        ? { question: src.question || '', answer: src.answer || '', status: src.status || '已发布', sort }
+        : { question: '', answer: '', status: '已发布', sort: nextSort };
+    }
+    if (key === 'laws' || key === 'news') {
+      const rows = key === 'laws' ? data.articles.filter((x) => x.kind === '法规') : data.articles.filter((x) => x.kind === '公告');
+      const src = isNew ? null : rows.find((row) => row.id === id);
+      const coverKind = src?.coverKind || (src?.mediaType === '视频' ? 'video' : 'image');
+      const effectiveStart = src?.effectiveStart || src?.effectiveDate || src?.date || data.now;
+      const effectiveEnd = src?.effectiveEnd || '';
+      const nextSort = rows.reduce((max, row) => Math.max(max, Number(row.sort) || 0), 0) + 1;
+      const sort = Number(src?.sort) > 0 ? Number(src.sort) : (src?.pinned ? 1 : nextSort);
+      return src
+        ? { title: src.title || '', source: src.source || '鄞州区低空安全服务中心', coverKind, coverImage: src.coverImage || '', coverName: src.coverName || '', status: src.status || '已发布', sort, summary: src.summary || '', effectiveStart, effectiveEnd, body: (src.content || []).join('\n') }
+        : { title: '', source: '鄞州区低空安全服务中心', coverKind: 'image', coverImage: '', coverName: '', status: '已发布', sort: nextSort, summary: '', effectiveStart: data.now, effectiveEnd: '', body: '' };
+    }
+    if (key === 'messages') {
+      const src = isNew ? null : data.messages.find((m) => m.id === id);
+      const channel = src?.channel === '系统消息' ? '系统推送' : (src?.channel || '系统推送');
+      return src
+        ? { title: src.title || '', content: src.content || '', channel, time: src.time || `${data.now} 15:00`, state: src.state === '已推送' ? '已推送' : '未推送', pusher: src.pusher || '综合管理员' }
+        : { title: '', content: '', channel: '系统推送', time: `${data.now} 15:00`, state: '未推送', pusher: '综合管理员' };
+    }
+    if (key === 'users') {
+      const user = isNew ? null : data.users.find((u) => u.id === id);
+      const supplement = (!isNew && id === 'USR-001' ? data.profiles.personal.supplement : user?.supplement) || {};
+      const normalized = data.normalizePersonalSupplement ? data.normalizePersonalSupplement(supplement) : supplement;
+      return user
+        ? { name: user.name || '', idNumber: user.idNumber || '', phone: user.phone || '', address: user.address || '', district: normalized.district || '', emergencyContact: normalized.emergencyContact || '', emergencyPhone: normalized.emergencyPhone || '' }
+        : { name: '', idNumber: '', phone: '', address: '', district: '', emergencyContact: '', emergencyPhone: '' };
+    }
+    if (key === 'companies') {
+      const company = isNew ? null : data.companies.find((c) => c.id === id);
+      const supplement = (!isNew && id === 'ENT-001' ? data.profiles.company.supplement : company?.supplement) || {};
+      return company
+        ? { name: company.name || '', creditCode: company.creditCode || '', verified: company.verified || '已认证', contact: company.contact || '', phone: company.phone || '', droneUsage: supplement.droneUsage || '', safetyOfficer: supplement.safetyOfficer || '', safetyPhone: supplement.safetyPhone || '' }
+        : { name: '', creditCode: '', verified: '待认证', contact: '', phone: '', droneUsage: '', safetyOfficer: '', safetyPhone: '' };
+    }
+    if (key === 'volunteers') {
+      const src = isNew ? null : data.volunteers.find((v) => v.id === id);
+      return src
+        ? { name: src.name || '', phone: src.phone || '', volunteerType: src.volunteerType || '低空爱好者', area: src.area || '', confirmedAt: src.confirmedAt || '', source: src.source || '线下报名确认' }
+        : { name: '', phone: '', volunteerType: '低空爱好者', area: '', confirmedAt: '', source: '线下报名确认' };
+    }
+    if (key === 'blacklist') {
+      const src = isNew ? null : data.blacklist.find((b) => b.id === id);
+      return src
+        ? { name: src.name || '', type: src.type || '个人用户', reason: src.reason || '', state: src.state === '已取消' ? '已取消' : '已拉黑', operatedBy: src.operatedBy || '', operatedAt: src.operatedAt || '' }
+        : { name: '', type: '个人用户', reason: '', state: '已拉黑', operatedBy: '', operatedAt: '' };
+    }
+    if (key === 'verification') {
+      const src = isNew ? null : data.verification.find((v) => v.id === id);
+      return src
+        ? {
+          droneId: src.droneId || '',
+          aircraftName: src.aircraftName || src.name || '',
+          registrationMark: src.registrationMark || '',
+          ownerType: src.ownerType || '个人',
+          checkType: src.checkType || '证照核查',
+          checkMethod: src.checkMethod || '材料核验',
+          checkPlace: src.checkPlace || '',
+          result: src.result || '待补充',
+          issueDesc: src.issueDesc || '',
+          suggestion: src.suggestion || src.detail || '',
+          followUpDate: src.followUpDate || ''
+        }
+        : {
+          droneId: '',
+          aircraftName: '',
+          registrationMark: '',
+          ownerType: '个人',
+          checkType: '证照核查',
+          checkMethod: '材料核验',
+          checkPlace: '',
+          result: '待补充',
+          issueDesc: '',
+          suggestion: '',
+          followUpDate: ''
+        };
+    }
+    return {};
+  };
+
+  const backKey = (key) => (key === 'feedback-forms' ? 'feedback' : key);
+
+  const renderBody = (key, draft, safe, opts = {}) => {
+    const rich = RE();
+    const ui = UI();
+    const input = (field, opts = {}) => `<input ${opts.required ? 'required ' : ''}${opts.type ? `type="${opts.type}" ` : ''}data-draft-field="${field}" value="${safe(draft[field] || '')}" ${opts.placeholder ? `placeholder="${safe(opts.placeholder)}"` : ''} ${opts.min ? `min="${opts.min}"` : ''} />`;
+    const textarea = (field, opts = {}) => `<textarea ${opts.required ? 'required ' : ''}data-draft-field="${field}" ${opts.placeholder ? `placeholder="${safe(opts.placeholder)}"` : ''}>${safe(draft[field] || '')}</textarea>`;
+    const select = (field, options) => `<select data-draft-field="${field}">${options.map((t) => `<option${(draft[field] || '') === t ? ' selected' : ''}>${safe(t)}</option>`).join('')}</select>`;
+
+    if (key === 'activities') {
+      const fieldTable = ui.enrollFieldTable(draft.fields || [], { locked: Boolean(opts.enrollLocked), canSave: Boolean(opts.canSaveEnrollFields) });
+      return `<form class="form-stack" id="admin-form"><label>活动名称${input('title', { required: true })}</label><div class="form-grid-2"><label>活动开始时间${input('startTime', { required: true, placeholder: '2026-08-20 09:00' })}</label><label>活动结束时间${input('endTime', { required: true, placeholder: '2026-08-20 11:30' })}</label><label>报名开始时间${input('enrollStart', { required: true })}</label><label>报名截止时间${input('enrollEnd', { required: true })}</label></div><label>活动地点${input('place', { required: true })}</label><label>活动名额${input('capacity', { required: true, type: 'number', min: '1' })}</label><label>主办单位${input('organizer', { required: true })}</label><label>咨询方式${input('contact', { required: true, placeholder: '如 服务咨询 0574-****-8612' })}</label><label>活动简介${textarea('summary', { required: true })}</label><label><span>活动介绍（富文本）</span>${rich.mountMarkup('richText', rich.textToHtml(draft.richText), '请输入活动介绍')}</label><fieldset class="config-fieldset enroll-config-fieldset"><legend>报名表单字段配置</legend>${fieldTable}</fieldset></form>`;
+    }
+    if (key === 'feedback-forms') {
+      return `<form class="form-stack" id="admin-form"><label>表单名称${input('name', { required: true })}</label><label>适用场景${input('scene', { required: true, placeholder: '如 通用反馈 / 隐患上报' })}</label><fieldset class="config-fieldset"><legend>表单字段配置</legend>${ui.configRows(draft.fields || [])}</fieldset></form>`;
+    }
+    if (key === 'guides') {
+      return `<form class="form-stack" id="admin-form"><label>流程标题${input('title', { required: true })}</label><label>流程摘要${input('summary', { required: true })}</label><div class="form-grid-2"><label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>编号排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>图文说明（富文本）</span>${rich.mountMarkup('body', rich.textToHtml(draft.body), '输入流程说明')}</label></form>`;
+    }
+    if (key === 'faq') {
+      return `<form class="form-stack" id="admin-form"><label>问题${input('question', { required: true, placeholder: '如：飞行区域无法选择怎么办？' })}</label><div class="form-grid-2"><label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>图文解答（富文本）</span>${rich.mountMarkup('answer', rich.textToHtml(draft.answer), '输入完整解答')}</label></form>`;
+    }
+    if (key === 'laws' || key === 'news') {
+      const isVideoCover = draft.coverKind === 'video';
+      const coverPreview = draft.coverImage
+        ? (isVideoCover
+          ? `<video class="cover-upload-preview" src="${safe(draft.coverImage)}" muted playsinline controls></video>`
+          : `<img class="cover-upload-preview" src="${safe(draft.coverImage)}" alt="封面预览" />`)
+        : `<div class="cover-upload-placeholder"><b>封面预览</b><span>支持图片/视频</span></div>`;
+      const coverUpload = ui.uploadField({
+        id: 'content-cover-file',
+        previewHtml: coverPreview,
+        label: '上传封面',
+        hint: '支持 JPG、PNG、MP4、WebM',
+        accept: 'image/png,image/jpeg,video/mp4,video/webm',
+        actionText: '选择文件'
+      });
+      return `<form class="form-stack" id="admin-form"><label>内容标题${input('title', { required: true })}</label><label>发布单位${input('source', { required: true })}</label><div class="form-grid-2">${key === 'laws' ? `<label>生效开始日期${input('effectiveStart', { required: true, type: 'date' })}</label><label>生效结束日期${input('effectiveEnd', { required: true, type: 'date' })}</label>` : ''}<label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>封面</span>${coverUpload}${draft.coverName ? `<small class="record-note">已选：${safe(draft.coverName)}</small>` : ''}</label><label>摘要${textarea('summary', { required: true })}</label><label><span>正文（富文本）</span>${rich.mountMarkup('body', rich.textToHtml(draft.body), '请输入正文')}</label></form>`;
+    }
+    if (key === 'messages') {
+      return `<form class="form-stack" id="admin-form"><label>消息标题${input('title', { required: true, placeholder: '请输入推送标题' })}</label><label>消息内容${textarea('content', { required: true, placeholder: '请输入推送内容' })}</label><label>推送时间${input('time', { required: true })}</label><label>消息类型${select('channel', ['浙里办推送', '系统推送'])}</label><label>状态${select('state', ['未推送', '已推送'])}</label><label>推送人${input('pusher', { required: true, placeholder: '如 综合管理员' })}</label></form>`;
+    }
+    if (key === 'users') {
+      const streets = (typeof global !== 'undefined' && global.LowAltitudeMock?.yinzhouStreets) || [];
+      const districtSelect = `<select data-draft-field="district"><option value="">请选择鄞州区街道</option>${streets.map((street) => `<option${(draft.district || '') === street ? ' selected' : ''}>${safe(street)}</option>`).join('')}</select>`;
+      return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>姓名${input('name', { required: true })}</label><label>身份证号${input('idNumber', { required: true })}</label><label>手机号码${input('phone', { required: true })}</label><label>地址${textarea('address', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>所属地${districtSelect}</label><label>紧急联系人${input('emergencyContact')}</label><label>紧急联系电话${input('emergencyPhone', { type: 'tel' })}</label></fieldset></form>`;
+    }
+    if (key === 'companies') {
+      return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>企业名称${input('name', { required: true })}</label><label>统一社会信用代码${input('creditCode', { required: true })}</label><label>认证状态${select('verified', ['已认证', '待认证'])}</label><label>授权联系人${input('contact', { required: true })}</label><label>联系电话${input('phone', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>无人机主要用途${input('droneUsage')}</label><label>安全负责人${input('safetyOfficer')}</label><label>安全负责人电话${input('safetyPhone')}</label></fieldset></form>`;
+    }
+    if (key === 'volunteers') {
+      const streets = (typeof window !== 'undefined' && window.LowAltitudeMock?.yinzhouStreets) || [];
+      const areaSelect = `<select required data-draft-field="area"><option value="">请选择所属区域</option>${streets.map((street) => `<option${(draft.area || '') === street ? ' selected' : ''}>${safe(street)}</option>`).join('')}</select>`;
+      return `<form class="form-stack" id="admin-form"><label>姓名${input('name', { required: true })}</label><label>手机号码${input('phone', { required: true, placeholder: '如 138****0000' })}</label><label>志愿者类型${select('volunteerType', ['低空爱好者', '社区网格员'])}</label><label>所属区域${areaSelect}</label><label>线下确认日期${input('confirmedAt', { required: true, type: 'date' })}</label><label>来源${select('source', ['线下报名确认'])}</label></form>`;
+    }
+    if (key === 'blacklist') {
+      return `<form class="form-stack" id="admin-form"><label>对象名称${input('name', { required: true })}</label><label>对象类型${select('type', ['个人用户', '企业用户', '授权账号'])}</label><label>拉黑原因${textarea('reason', { required: true })}</label><label>状态${select('state', ['已拉黑', '已取消'])}</label></form>`;
+    }
+    if (key === 'verification') {
+      const mock = global.LowAltitudeMock || {};
+      const drones = (mock.drones || []).filter((drone) => drone.status !== '已注销' && drone.registrationStatus !== '已注销');
+      const droneOptions = [`<option value="">请选择关联设备</option>`, ...drones.map((drone) => {
+        const name = (mock.uomValue ? mock.uomValue(drone, 'aircraftName') : drone.aircraftName) || drone.name || drone.id;
+        const mark = (mock.uomValue ? mock.uomValue(drone, 'registrationMark') : drone.registrationMark) || '待关联';
+        const owner = drone.accountRole === 'company' ? '企业' : '个人';
+        return `<option value="${safe(drone.id)}"${draft.droneId === drone.id ? ' selected' : ''}>${safe(name)} · ${safe(mark)} · ${owner}</option>`;
+      })].join('');
+      return `<form class="form-stack" id="admin-form"><label>关联设备<select required data-draft-field="droneId">${droneOptions}</select></label><div class="form-grid-2"><label>核查类型${select('checkType', ['证照核查', '现场核查', '抽查复核'])}</label><label>核查方式${select('checkMethod', ['材料核验', '上门核查', '电话复核'])}</label></div><label>核查地点${input('checkPlace', { required: true, placeholder: '如：鄞州区低空服务窗口 / 企业机库 / 远程复核' })}</label><label>核查结果${select('result', ['通过', '不通过', '待补充'])}</label><label>问题描述${textarea('issueDesc', { placeholder: '不通过或待补充时填写发现的问题' })}</label><label>处理意见${textarea('suggestion', { required: true, placeholder: '填写核查结论与后续处理意见' })}</label><label>计划跟进日期${input('followUpDate', { type: 'date' })}</label></form>`;
+    }
+    return '<div class="empty">未配置的表单模块</div>';
+  };
+
+  const titles = {
+    activities: ['新建活动', '编辑活动', '创建后进入“报名中”；指定授权账号在报名名单中确认。'],
+    'feedback-forms': ['新建反馈表单', '编辑反馈表单', '表单发布后用户端按字段配置采集。'],
+    guides: ['新建流程指导', '编辑流程指导', '保存后同步用户端操作手册。'],
+    faq: ['新建常见问题', '编辑常见问题', '仅已发布内容在用户端可见。'],
+    laws: ['新建政策法规', '编辑政策法规', '需填写发布单位与生效起止日期。'],
+    news: ['新建新闻公告', '编辑新闻公告', '封面可上传图片或视频。'],
+    messages: ['新建用户消息', '编辑用户消息', ''],
+    users: ['新增用户', '编辑个人信息', '保存后同步至用户端个人档案。'],
+    companies: ['新增企业', '编辑企业信息', '保存后同步至用户端企业档案。'],
+    volunteers: ['添加志愿者', '编辑志愿者', ''],
+    blacklist: ['新增黑名单', '编辑黑名单', '可拉黑个人、企业或授权账号。'],
+    verification: ['新增核查', '编辑核查记录', '']
+  };
+
+  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false }) => {
+    const isNew = !id || id === 'new';
+    const meta = titles[key] || ['新建', '编辑', ''];
+    const title = isNew ? meta[0] : meta[1];
+    const preview = ['activities', 'laws', 'news', 'guides', 'faq'].includes(key);
+    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields });
+    const page = FP().render({
+      title,
+      description: meta[2],
+      backKey: backKey(key),
+      backLabel: '返回列表',
+      preview,
+      saveAction: 'submit-form-page',
+      saveLabel: key === 'verification' ? '保存核查' : (isNew ? (key === 'activities' ? '发布活动' : '保存配置') : '保存配置'),
+      body
+    });
+    return shell(page, backKey(key));
+  };
+
+  global.AdminForms = { loadDraft, render, defaultEnrollFields, backKey };
+})(typeof globalThis !== 'undefined' ? globalThis : window);
