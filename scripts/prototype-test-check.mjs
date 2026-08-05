@@ -33,6 +33,7 @@ if (!zhelibanCss.includes('.page-toolbar') || !zhelibanCss.includes('.mobile-chr
 if (!zhelibanCss.includes('.mobile-more{display:inline-flex') || !zhelibanCss.includes('.page-toolbar-actions .tabs{flex:1 1 auto;width:100%')) errors.push('手机顶栏更多按钮或工具条 Tab 全宽样式不正确');
 if (!zhelibanCss.includes('.activity-card .activity-cover{min-height:168px}') || !zhelibanCss.includes('.activity-card footer{display:flex') || !zhelibanCss.includes('.phone-shell.viewport-desktop .activity-list{grid-template-columns:repeat(2,minmax(0,1fr))')) errors.push('活动中心卡片比例或 PC 双列布局不正确');
 if (!zhelibanCss.includes('.drone-tabs{margin-bottom:12px}') && !zhelibanCss.includes('.page-toolbar-actions .drone-tabs')) errors.push('浙里办无人机类型标签与搜索框未保留必要间距');
+if (!zhelibanCss.includes('.detail-grid span{display:flex;align-items:center;padding:10px 12px;background:var(--surface);color:#536b88') || !zhelibanCss.includes('.detail-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}')) errors.push('浙里办详情表格仍含灰色标签底或飞行计划操作按钮未平铺');
 const cssRules = (selector) => [...zhelibanCss.matchAll(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\{([^{}]*)\\}`, 'gu'))].map((match) => Object.fromEntries(match[1].split(';').filter(Boolean).map((declaration) => { const separator = declaration.indexOf(':'); return [declaration.slice(0, separator), declaration.slice(separator + 1)]; })));
 const requireRule = ({ selector, index = 0, count = 1, expected }) => {
   const rules = cssRules(selector);
@@ -175,6 +176,8 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   setValidity(true);
   click({ action: 'close-modal' });
   click({ action: 'execute', id: 'FP-20260803-018' });
+  if (!app.innerHTML.includes('确认执行飞行计划？') || !app.innerHTML.includes('data-action="confirm-execute"')) errors.push('浙里办执行确认弹窗缺失');
+  click({ action: 'confirm-execute' });
   if (!app.innerHTML.includes('已确认执行')) errors.push('浙里办执行确认交互失败');
   visit('#/activities');
   if (app.innerHTML.includes('activity-carousel') || app.innerHTML.includes('重点活动') || app.innerHTML.includes('activity-slide') || app.innerHTML.includes('data-action="activity-slide"')) errors.push('活动中心仍保留重点活动轮播');

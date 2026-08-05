@@ -312,7 +312,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, droneDraft: emptyDroneDraft(), flightDraft: {}, flightMode: 'create', pendingFlight: '', flightShot: 'empty', flightShotRequest: 0, batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, droneDraft: emptyDroneDraft(), flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -723,7 +723,8 @@
       : fields ? fields.map(([key, label]) => [label, kind === 'drone' ? droneValue(key) : data.uomValue(item, key)]).concat(kind === 'certificate' ? [['上传时间', item.updated || '—']] : state.role === 'company' && kind === 'drone' ? [['归属', item.owner || '—'], ['分配飞手', assignedPilot ? assignedPilot.name : '未分配'], ['设备状态', droneRegistrationState(item)]] : [['归属', item.owner || '—'], ['设备类型', item.group || '—'], ...(kind === 'drone' && item.group === '使用设备' && (item.ownerCompany || data.profiles.personal.affiliatedCompany) ? [['所属公司', item.ownerCompany || data.profiles.personal.affiliatedCompany]] : []), ['设备状态', droneRegistrationState(item)]]) : Object.entries(item).map(([key, value]) => [({id:'编号',model:'设备型号',sn:'设备编号',registrationMark:'登记标志',serialNumber:'序号',holder:'持有人',source:'数据来源',owner:'归属',group:'分组',status:'状态',certificate:'登记证',drone:'关联设备',state:'状态',updated:'更新时间',title:'标题',time:'计划时间',area:'申报区域',executed:'执行状态',kind:'类别',date:'日期'})[key] || key, value]);
     const fallback = kind === 'certificate' ? 'certificates' : kind === 'drone' ? 'drones' : kind === 'flight' ? 'flights' : 'knowledge';
     const detailTitle = kind === 'certificate' ? 'UOM 登记证详情' : kind === 'drone' ? '无人机详情' : kind === 'flight' ? '飞行计划详情' : '详情';
-    const flightActions = kind === 'flight' && state.role !== 'company' ? (item.executed === '未执行' ? `<button class="primary-btn" data-action="edit-flight" data-id="${safe(item.id)}">修改计划</button><button class="secondary-btn" data-action="execute" data-id="${safe(item.id)}">确认执行</button>` : '<span class="modify-note">已确认执行，飞行后计划不可再修改</span>') : '';
+    const canConfirmFlight = kind === 'flight' && state.role !== 'company' && item.executed === '未执行';
+    const flightActions = kind === 'flight' && state.role !== 'company' ? (canConfirmFlight ? `<button class="primary-btn" data-action="edit-flight" data-id="${safe(item.id)}">修改计划</button><button class="secondary-btn" data-action="execute" data-id="${safe(item.id)}">确认执行</button>` : '<span class="modify-note">已确认执行，飞行后计划不可再修改</span>') : '';
     const bindCertificateAction = kind === 'drone' && !droneIsBound(item)
       ? `<button class="primary-btn" data-action="bind-certificate" data-id="${safe(item.id)}">上传登记证关联</button>`
       : '';
@@ -731,7 +732,7 @@
       ? `<button class="${bindCertificateAction ? 'secondary-btn' : 'primary-btn'}" data-action="modal" data-modal="assign-pilot" data-id="${safe(item.id)}">${assignedPilot ? '重新分配飞手' : '分配给飞手'}</button>${assignedPilot ? `<button class="secondary-btn" data-action="unassign-drone" data-id="${safe(item.id)}">取消分配</button>` : ''}`
       : '';
     const certificateImageField = kind === 'certificate' ? `<div class="certificate-field"><span>登记证截图</span><b><img class="certificate-field-image" src="${safe(item.certificateImageUrl || '../../shared/assets/uom-registration-certificate.svg')}" alt="已上传的 UOM 登记证截图" /></b></div>` : '';
-    return shell(`${title(detailTitle, true, fallback)}<section class="detail-grid">${rows.map(([k,v]) => `<div><span>${safe(k)}</span><b>${safe(v)}</b></div>`).join('')}${certificateImageField}</section><div class="actions">${flightActions}${bindCertificateAction}${droneActions}</div>`, 'services');
+    return shell(`${title(detailTitle, true, fallback)}<section class="detail-grid">${rows.map(([k,v]) => `<div><span>${safe(k)}</span><b>${safe(v)}</b></div>`).join('')}${certificateImageField}</section><div class="actions${canConfirmFlight ? ' detail-actions' : ''}">${flightActions}${bindCertificateAction}${droneActions}</div>`, 'services');
   };
   const ocrLabels = { registrationMark:'登记标志', manufacturerModel:'航空器型号和制造人', serialNumber:'序号', aircraftName:'产品名称', emptyWeight:'空机重量', maxTakeoffWeight:'最大起飞重量', aircraftType:'类型', issuedTo:'本证发给', mobilePhone:'联系手机', registrationStatus:'状态', registrationDate:'注册日期' };
   const certificatePreview = () => state.ocr.image ? `<img class="certificate-preview-image" src="${state.ocr.image}" alt="已上传的 UOM 登记证" />` : `<div class="certificate-placeholder" aria-label="UOM 登记证字段示意"><b>中国民用航空局</b><strong>无人机实名登记证</strong><span>CERTIFICATE OF UAS REGISTRATION</span><i>登记信息图片</i></div>`;
@@ -752,6 +753,11 @@
   };
   const modal = () => {
     const type = state.modal;
+    if (type === 'execute-flight') {
+      const item = data.flights.find((flight) => flight.id === state.pendingExecution);
+      if (!item || item.executed !== '未执行') return '';
+      return `<div class="modal-layer modal-layer--center" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal execution-confirm-modal"><span class="modal-kicker">飞行计划</span><h2 id="modal-title" tabindex="-1">确认执行飞行计划？</h2><p>确认后将记录本次计划的执行状态。</p><dl class="execution-confirm-card"><div><dt>计划名称</dt><dd>${safe(item.title)}</dd></div><div><dt>预计时间</dt><dd>${safe(flightTime(item))}</dd></div></dl><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">暂不确认</button><button class="primary-btn" data-action="confirm-execute">确认执行</button></div></section></div>`;
+    }
     if (type === 'faq-detail') {
       const item = data.uomGuide.faqs.find((faq) => faq.id === state.selectedFaq && faq.status === '已发布');
       return `<div class="modal-layer modal-layer--center" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal faq-detail-modal"><div class="modal-heading"><div><span class="profile-kicker">常见问题解答</span><h2 id="modal-title" tabindex="-1">${safe(item?.question || '问题解答')}</h2></div><button class="icon-button" data-action="close-modal" aria-label="关闭">×</button></div>${item ? `<div class="faq-rich-content">${renderFaqRichText(item.answer)}</div><small class="faq-update-time">更新时间：${safe(item.updated || data.uomGuide.updated)}</small>` : '<div class="empty">该问题暂不可查看</div>'}<div class="modal-actions"><button class="primary-btn" data-action="close-modal">我知道了</button></div></section></div>`;
@@ -1281,7 +1287,22 @@
     if (action === 'execute') {
       if (state.role === 'company') { announce('企业账号仅可查看本公司飞行计划'); return; }
       const item = data.flights.find((x) => x.id === target.dataset.id);
-      if (item) { item.executed = '已确认执行'; item.executedAt = `${data.now} 16:00`; item.history = [...(item.history || []), { time: item.executedAt, action: '确认执行', detail: '用户确认飞行计划已执行（mock）' }]; persistPublicService(); }
+      if (!item || item.executed !== '未执行') { announce('该计划已确认执行'); return; }
+      state.pendingExecution = item.id;
+      state.modal = 'execute-flight';
+      state.returnFocus = `[data-action="execute"][data-id="${safe(item.id)}"]`;
+      render();
+      return;
+    }
+    if (action === 'confirm-execute') {
+      const item = data.flights.find((x) => x.id === state.pendingExecution);
+      if (!item || item.executed !== '未执行') { state.modal = null; announce('该计划已确认执行'); return; }
+      item.executed = '已确认执行';
+      item.executedAt = `${data.now} 16:00`;
+      item.history = [...(item.history || []), { time: item.executedAt, action: '确认执行', detail: '用户确认飞行计划已执行（mock）' }];
+      persistPublicService();
+      state.pendingExecution = '';
+      state.modal = null;
       announce('已记录执行确认');
     }
     if (action === 'join') { state.joined.add(target.dataset.id); announce('报名成功'); }
