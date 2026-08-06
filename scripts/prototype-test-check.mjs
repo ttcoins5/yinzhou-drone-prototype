@@ -246,10 +246,17 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   visit('#/messages');
   if (!app.innerHTML.includes('data-action="message-view" data-value="all"') || !app.innerHTML.includes('data-action="message-view" data-value="unread"') || app.innerHTML.includes('浙里办推送') || app.innerHTML.includes('系统消息')) errors.push('浙里办消息筛选未调整为全部和未读');
   click({ action: 'message-view', value: 'unread' });
-  if (!app.innerHTML.includes('飞行计划信息待补充') || app.innerHTML.includes('低空安全培训报名成功')) errors.push('浙里办未读消息筛选失败');
+  if (!app.innerHTML.includes('飞行计划信息待补充') || app.innerHTML.includes('活动报名成功')) errors.push('浙里办未读消息筛选失败');
   visit('#/feedback');
   if (['办理说明', '办理状态', '办理回复', '反馈编号', '是否允许联系', '我的反馈', 'feedback-detail'].some((text) => app.innerHTML.includes(text))) errors.push('浙里办意见反馈仍包含办理功能或历史留痕');
-  if (!app.innerHTML.includes('提交意见反馈') || !app.innerHTML.includes('反馈类型') || !app.innerHTML.includes('图片附件') || !app.innerHTML.includes('multiple') || !app.innerHTML.includes('id="feedback-form"') || app.innerHTML.includes('请按表单字段填写，提交的信息将用于服务优化') || app.innerHTML.includes('填写反馈')) errors.push('浙里办信息收集表单或多图上传字段缺失');
+  if (!app.innerHTML.includes('提交意见反馈') || !app.innerHTML.includes('反馈类型') || !app.innerHTML.includes('data-action="toggle-feedback-type"') || !app.innerHTML.includes('feedback-type-picker') || !app.innerHTML.includes('图片附件') || !app.innerHTML.includes('multiple') || !app.innerHTML.includes('id="feedback-form"') || app.innerHTML.includes('请按表单字段填写，提交的信息将用于服务优化') || app.innerHTML.includes('填写反馈')) errors.push('浙里办意见反馈缺少类型选择或动态表单字段');
+  click({ action: 'toggle-feedback-type' });
+  if (!app.innerHTML.includes('功能建议') || !app.innerHTML.includes('问题咨询') || !app.innerHTML.includes('隐患上报') || !app.innerHTML.includes('data-action="select-feedback-form"')) errors.push('浙里办反馈类型下拉未展开可选类型');
+  click({ action: 'select-feedback-form', id: 'FORM-03' });
+  if (!app.innerHTML.includes('隐患位置') || !app.innerHTML.includes('隐患描述') || !app.innerHTML.includes('现场照片')) errors.push('切换反馈类型后未切换为隐患上报表单字段');
+  click({ action: 'toggle-feedback-type' });
+  click({ action: 'select-feedback-form', id: 'FORM-01' });
+  if (!app.innerHTML.includes('图片附件') || !app.innerHTML.includes('反馈标题')) errors.push('切回功能建议后动态表单未恢复');
   uploadFeedback();
   if (!app.innerHTML.includes('已选择 2 张') || !app.innerHTML.includes('反馈图片 2.jpg')) errors.push('浙里办多图上传选择反馈缺失');
   click({ action: 'submit-feedback' });
@@ -457,8 +464,9 @@ if (legacyCertificate) {
 browserStorage.delete('yinzhou-public-service-v2');
 browserStorage.set('yinzhou-public-service-v2', JSON.stringify({
   feedbacks: [
-    { id: 'FB-SYNC-001', category: '功能建议', title: '未命名反馈', content: '用户端提交后同步至后台的反馈（mock）', time: '2026-08-04 14:36', fields: {}, attachments: {} },
-    { id: 'FB-202607-008', category: '功能建议', title: '希望增加活动报名提醒', content: '建议在活动开始前通过浙里办消息提醒已报名用户。', time: '2026-07-28 16:20', fields: {}, attachments: {} }
+    { id: 'FB-SYNC-001', formId: 'FORM-01', category: '功能建议', submitterType: '个人用户', submitterName: '陈先生（演示）', title: '未命名反馈', content: '用户端提交后同步至后台的反馈（mock）', time: '2026-08-04 14:36', fields: { title: '未命名反馈', content: '用户端提交后同步至后台的反馈（mock）' }, attachments: {} },
+    { id: 'FB-202607-008', formId: 'FORM-01', category: '功能建议', submitterType: '个人用户', submitterName: '陈先生（演示）', title: '希望增加活动报名提醒', content: '建议在活动开始前通过浙里办消息提醒已报名用户。', time: '2026-07-28 16:20', fields: { title: '希望增加活动报名提醒', content: '建议在活动开始前通过浙里办消息提醒已报名用户。' }, attachments: {} },
+    { id: 'FB-202607-005', formId: 'FORM-02', category: '问题咨询', submitterType: '企业用户', submitterName: '鄞州云航服务有限公司（演示）', title: '登记证图片上传格式咨询', content: '请问登记证是否支持 JPG 以外的图片格式？', time: '2026-07-19 16:22', fields: { title: '登记证图片上传格式咨询', content: '请问登记证是否支持 JPG 以外的图片格式？', phone: '139****1682' }, attachments: {} }
   ]
 }));
 runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, inputDraft, changeDraft, inputLogin }) => {
@@ -629,6 +637,14 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   visit('#/detail/activities/ACT-01');
   if (!['活动开始时间','报名开始时间','活动介绍','本场报名名单','报名确认状态','报名人','查看填写内容'].every((field) => app.innerHTML.includes(field))) errors.push('后台活动二级页面缺失活动详情或未直接展示报名名单');
   if (!app.innerHTML.includes('data-go="form/activities/ACT-01"')) errors.push('后台活动详情缺少独立表单编辑入口');
+  {
+    const headingMatch = app.innerHTML.match(/<header class="page-heading">[\s\S]*?<\/header>/);
+    const headingHtml = headingMatch ? headingMatch[0] : '';
+    if (!headingHtml.includes('编辑活动') || !headingHtml.includes('下架活动') || !headingHtml.includes('删除活动') || !headingHtml.includes('返回列表')) {
+      errors.push('后台活动详情的编辑/下架/删除应放在标题右上角，不应放在页面底部');
+    }
+    if (!app.innerHTML.includes('标题右上角') || !app.innerHTML.includes('详情页操作')) errors.push('右侧页面说明未同步详情页操作在标题右上角');
+  }
   if (app.innerHTML.includes('查看报名名单') && app.innerHTML.includes('data-action="view-enrollments"')) errors.push('活动详情仍使用点击后打开名单弹窗的入口');
   if (!app.innerHTML.includes('一键确认') || !app.innerHTML.includes('data-action="confirm-activity-enrollments"') || !app.innerHTML.includes('报名人')) errors.push('活动详情未直接展示报名名单或一键确认');
   if (!app.innerHTML.includes('data-action="view-enrollment-form"') || app.innerHTML.includes('data-go="detail/enrollments/')) errors.push('报名名单内查看填写内容应改为弹窗入口，不应跳转详情页');
@@ -708,8 +724,15 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (!app.innerHTML.includes('飞行区域无法选择或填写有误怎么办？') || app.innerHTML.includes('什么情况下需要进行飞行活动自主申报？') || !app.innerHTML.includes('共 1 条，第 1/1 页')) errors.push('后台常见问题关键词搜索或搜索后分页重置失败');
   search('不存在的问题');
   if (!app.innerHTML.includes('暂无符合条件的问题')) errors.push('后台常见问题搜索空结果反馈缺失');
+  visit('#/feedback');
+  if (!['反馈编号', '提交人', '用户身份', '表单类型', '提交时间', '操作'].every((field) => app.innerHTML.includes(field)) || !app.innerHTML.includes('>查看详情<') || app.innerHTML.includes('反馈摘要')) errors.push('后台反馈内容列表字段或操作列不正确');
+  if (!app.innerHTML.includes('data-action="view-feedback-form" data-id="FB-202607-008"') || !app.innerHTML.includes('陈先生') || !app.innerHTML.includes('鄞州云航')) errors.push('后台反馈内容缺少查看详情入口或提交人信息');
+  click({ action: 'view-feedback-form', id: 'FB-202607-008' });
+  if (!app.innerHTML.includes('用户填写内容') || !app.innerHTML.includes('表单类型') || !app.innerHTML.includes('希望增加活动报名提醒') || ['办理状态', '当前办理回复', '填写办理回复', '回复内容'].some((text) => app.innerHTML.includes(text))) errors.push('后台反馈内容弹窗未展示用户填写表单');
+  click({ action: 'close-modal' });
   visit('#/detail/feedback/FB-202607-008');
-  if (!app.innerHTML.includes('意见反馈详情') || !app.innerHTML.includes('希望增加活动报名提醒') || ['办理状态', '当前办理回复', '填写办理回复', '回复内容'].some((text) => app.innerHTML.includes(text))) errors.push('后台意见反馈未收敛为信息收集内容查看');
+  if (!app.innerHTML.includes('意见反馈详情') || !app.innerHTML.includes('FB-202607-008') || !app.innerHTML.includes('用户填写内容')) errors.push('后台意见反馈详情页未正确展示');
+  if (['当前办理回复', '填写办理回复'].some((text) => app.innerHTML.includes(text))) errors.push('后台意见反馈详情仍含办理回复能力');
   visit('#/feedback');
   {
     const titles = (() => { try { return JSON.parse(browserStorage.get('yinzhou-public-service-v2') || 'null')?.feedbacks?.map((item) => item.title) || []; } catch { return []; } })();
@@ -724,10 +747,15 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   visit('#/menus');
   if (!app.innerHTML.includes('保存排序') || !app.innerHTML.includes('展开/折叠') || !app.innerHTML.includes('组件路径') || !app.innerHTML.includes('意见反馈管理') || !app.innerHTML.includes('系统管理')) errors.push('系统管理菜单树表未对齐');
   visit('#/messages');
-  if (!app.innerHTML.includes('浙里办推送') || !app.innerHTML.includes('系统推送') || !app.innerHTML.includes('消息类型') || !app.innerHTML.includes('推送人') || !app.innerHTML.includes('消息内容') || !app.innerHTML.includes('推送时间')) errors.push('后台消息管理字段未按标题/内容/推送时间/类型/状态/推送人调整');
-  if (!app.innerHTML.includes('未推送') || !app.innerHTML.includes('已推送')) errors.push('后台消息管理缺少未推送/已推送状态');
+  if (!app.innerHTML.includes('消息模板') || !['模板编号', '模板名称', '业务场景', '触达渠道', '启用状态'].every((field) => app.innerHTML.includes(field))) errors.push('后台消息模板列表字段不正确');
+  if (!['飞行计划信息待补充', '设备核查结果通知', '活动报名成功', '登记证信息归集成功'].every((name) => app.innerHTML.includes(name))) errors.push('后台消息模板未按系统业务场景预置');
+  if (app.innerHTML.includes('>新建消息<') || app.innerHTML.includes('推送消息') || app.innerHTML.includes('新建用户消息') || app.innerHTML.includes('data-go="form/messages/new"')) errors.push('消息管理仍保留人工新建或主动推送入口');
+  if (!app.innerHTML.includes('toggle-message-template')) errors.push('消息模板缺少启用/停用操作');
+  visit('#/detail/messages/TPL-FP-01');
+  if (!app.innerHTML.includes('触发条件') || !app.innerHTML.includes('变量说明') || !app.innerHTML.includes('消息内容') || !app.innerHTML.includes('停用模板')) errors.push('消息模板详情字段或启停操作不正确');
   visit('#/form/messages/new');
-  if (!app.innerHTML.includes('新建用户消息') || !app.innerHTML.includes('消息类型') || !app.innerHTML.includes('消息内容') || !app.innerHTML.includes('推送人') || !app.innerHTML.includes('未推送') || !app.innerHTML.includes('系统推送') || !app.innerHTML.includes('推送时间')) errors.push('后台消息新建表单字段未对齐');
+  if (app.innerHTML.includes('新建用户消息') || (app.innerHTML.includes('form-page') && app.innerHTML.includes('推送人'))) errors.push('消息管理不应再提供新建表单页');
+  if (!app.innerHTML.includes('消息模板') || app.innerHTML.includes('data-go="form/messages/new"')) errors.push('旧消息新建路由未回退消息模板列表');
   visit('#/volunteers');
   if (!app.innerHTML.includes('form/volunteers/new') || !app.innerHTML.includes('在册状态') || app.innerHTML.includes('RID 配发状态') || /来源/.test(app.innerHTML.match(/data-table[\s\S]*?<\/table>/)?.[0] || '')) errors.push('后台志愿者管理缺少新建入口或仍展示 RID 配发状态/来源列');
   visit('#/form/volunteers/new');
@@ -740,8 +768,9 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (!app.innerHTML.includes('已选用户') || !app.innerHTML.includes('陈先生') || !app.innerHTML.includes('volunteer-clear-user')) errors.push('选择用户后未展示确认卡');
   visit('#/feedback');
   click({ action: 'feedback-tab', value: 'forms' });
+  if (!app.innerHTML.includes('反馈类型') || !app.innerHTML.includes('类型说明') || !app.innerHTML.includes('新建反馈类型') || !app.innerHTML.includes('功能建议') || !app.innerHTML.includes('问题咨询') || !app.innerHTML.includes('隐患上报')) errors.push('后台反馈表单管理未按反馈类型列表展示');
   visit('#/form/feedback-forms/FORM-01');
-  if (!app.innerHTML.includes('<option>多选</option>') || !app.innerHTML.includes('form-page')) errors.push('后台反馈表单独立页缺少多选或表单页壳');
+  if (!app.innerHTML.includes('反馈类型名称') || !app.innerHTML.includes('<option>多选</option>') || !app.innerHTML.includes('选项用顿号或逗号分隔') || !app.innerHTML.includes('form-page') || !app.innerHTML.includes('仅已发布类型在用户端可选')) errors.push('后台反馈类型独立页缺少选项配置或页面说明');
   visit('#/verification');
   if (!['核查编号', '设备名称', '设备序列号', '登记标志', '权属', '核查类型', '核查结果', '核查日期', '核查人'].every((field) => app.innerHTML.includes(field)) || !app.innerHTML.includes('搜索核查编号、设备名称、设备序列号或登记标志') || !['待核查', '通过', '不通过'].every((opt) => app.innerHTML.includes(opt))) errors.push('设备核查列表字段或查询筛选不正确');
   if (!app.innerHTML.includes('status success') || !app.innerHTML.includes('status danger') || !app.innerHTML.includes('status warning') || app.innerHTML.includes('待补充')) errors.push('设备核查结果标签色或状态枚举不正确');

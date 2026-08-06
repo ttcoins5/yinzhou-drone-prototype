@@ -56,7 +56,7 @@
 .readonly-fields span{color:var(--muted)}
 .readonly-fields b{font-weight:600}
 .config-rows{display:grid;gap:8px;margin-bottom:10px}
-.config-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,.8fr) auto;gap:8px;align-items:center}
+.config-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.85fr) minmax(0,.7fr) minmax(0,1.2fr) auto;gap:8px;align-items:center}
 .config-row input,.config-row select{min-height:36px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:13px inherit}
 .enroll-config-fieldset{border-style:solid;border-color:#c9dff3}
 .enroll-field-config{display:grid;gap:10px}

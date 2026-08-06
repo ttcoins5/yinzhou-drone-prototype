@@ -171,18 +171,32 @@
       ]
     },
     feedbacks: [
-      { id: 'FB-202607-008', category: '功能建议', title: '希望增加活动报名提醒', content: '建议在报名结束前一天发送一次站内提醒，避免错过报名时间。', time: '2026-07-26 10:18' },
-      { id: 'FB-202607-005', category: '问题咨询', title: '登记证图片上传格式咨询', content: '请问登记证是否支持 JPG 以外的图片格式？', time: '2026-07-19 16:22' }
+      { id: 'FB-202607-008', formId: 'FORM-01', category: '功能建议', submitterType: '个人用户', submitterName: '陈先生（演示）', title: '希望增加活动报名提醒', content: '建议在报名结束前一天发送一次站内提醒，避免错过报名时间。', fields: { title: '希望增加活动报名提醒', content: '建议在报名结束前一天发送一次站内提醒，避免错过报名时间。', '关注主题': '报名提醒、消息推送' }, time: '2026-07-26 10:18' },
+      { id: 'FB-202607-005', formId: 'FORM-02', category: '问题咨询', submitterType: '企业用户', submitterName: '鄞州云航服务有限公司（演示）', title: '登记证图片上传格式咨询', content: '请问登记证是否支持 JPG 以外的图片格式？', fields: { title: '登记证图片上传格式咨询', content: '请问登记证是否支持 JPG 以外的图片格式？', phone: '139****1682' }, time: '2026-07-19 16:22' },
+      { id: 'FB-202608-003', formId: 'FORM-03', category: '隐患上报', submitterType: '个人用户', submitterName: '李女士（演示）', title: '东钱湖周边疑似未报备飞行', content: '傍晚在东钱湖环湖路附近听到持续无人机声，未见明显报备标识。', fields: { title: '东钱湖周边疑似未报备飞行', content: '傍晚在东钱湖环湖路附近听到持续无人机声，未见明显报备标识。', '隐患位置': '东钱湖环湖路（演示）', '隐患类型': '未报备飞行' }, attachments: { '现场照片': ['隐患现场照片1.jpg'] }, time: '2026-08-03 18:42' }
     ],
     enrollments: [
       { id: 'ENR-ACT-01', activityId: 'ACT-01', name: '2026 年鄞州区无人机飞行安全培训', applicant: '陈*', phone: '138****2408', formData: { 报名人: '陈先生', 联系电话: '138****2408', 备注: '按时参加现场培训' }, time: '2026-07-31 10:12', state: '待确认' },
       { id: 'ENR-ACT-02', activityId: 'ACT-02', name: '夏季低空安全宣传进社区', applicant: '李*', phone: '137****5119', formData: { 报名人: '李女士', 联系电话: '137****5119', 备注: '携带无人机安全手册' }, time: '2026-08-02 09:36', state: '已确认' }
     ],
+    messageTemplates: [
+      { id: 'TPL-FP-01', name: '飞行计划信息待补充', scene: '飞行计划', trigger: '申报提交后系统校验发现必填项缺失', channel: '系统推送', title: '飞行计划信息待补充', content: '您有一条飞行计划「${计划名称}」信息待补充，请尽快完善后重新提交。', variables: '计划名称、计划编号', state: '已启用', updated: '2026-07-20' },
+      { id: 'TPL-FP-02', name: '飞行计划执行确认提醒', scene: '飞行计划', trigger: '计划预计开始时间临近且仍为未执行', channel: '系统推送', title: '飞行计划执行确认提醒', content: '您的飞行计划「${计划名称}」即将到达预计开始时间（${预计开始时间}），请在执行后及时完成确认。', variables: '计划名称、预计开始时间', state: '已启用', updated: '2026-07-20' },
+      { id: 'TPL-UOM-01', name: '登记证信息归集成功', scene: 'UOM 登记证', trigger: '用户上传登记证并 OCR 归集成功', channel: '系统推送', title: '登记证信息归集成功提醒', content: '您的 UOM 登记证「${登记标志}」信息已归集成功，可在登记证管理中查看。', variables: '登记标志、产品名称', state: '已启用', updated: '2026-07-18' },
+      { id: 'TPL-UOM-02', name: '登记证注销通知', scene: 'UOM 登记证', trigger: '用户或后台完成登记证注销', channel: '系统推送', title: '登记证已注销通知', content: '您的 UOM 登记证「${登记标志}」已注销，关联无人机不可再用于飞行计划申报。', variables: '登记标志', state: '已启用', updated: '2026-07-18' },
+      { id: 'TPL-CHK-01', name: '设备核查结果通知', scene: '设备核查', trigger: '后台完成设备核查并出具通过或不通过结论', channel: '系统推送', title: '设备核查结果通知', content: '您的设备「${设备名称}」（序列号 ${设备序列号}）核查结果为「${核查结果}」。处理意见：${处理意见}', variables: '设备名称、设备序列号、核查结果、处理意见', state: '已启用', updated: '2026-07-28' },
+      { id: 'TPL-ACT-01', name: '活动报名成功', scene: '活动报名', trigger: '用户成功提交活动报名', channel: '系统推送', title: '活动报名成功', content: '您已成功报名「${活动名称}」，活动时间 ${活动时间}，请按时参加。', variables: '活动名称、活动时间、活动地点', state: '已启用', updated: '2026-07-25' },
+      { id: 'TPL-ACT-02', name: '活动报名确认通知', scene: '活动报名', trigger: '后台对本场报名名单一键确认', channel: '系统推送', title: '活动报名已确认', content: '「${活动名称}」报名名单已确认，请按活动安排准时到场。', variables: '活动名称', state: '已启用', updated: '2026-07-25' },
+      { id: 'TPL-DRN-01', name: '无人机禁用通知', scene: '无人机管理', trigger: '后台对设备执行禁用', channel: '系统推送', title: '无人机设备已禁用', content: '您的无人机「${设备名称}」（登记标志 ${登记标志}）已被禁用，暂不可用于飞行计划申报。', variables: '设备名称、登记标志', state: '已启用', updated: '2026-07-22' },
+      { id: 'TPL-BLK-01', name: '账号限制通知', scene: '用户/企业管理', trigger: '后台将个人或企业账号拉入黑名单', channel: '系统推送', title: '账号状态变更通知', content: '您的账号因「${拉黑原因}」已被限制使用相关服务，如有疑问请联系管理部门。', variables: '拉黑原因', state: '已启用', updated: '2026-07-15' },
+      { id: 'TPL-NEWS-01', name: '安全资讯发布提醒', scene: '内容发布', trigger: '后台发布低空安全普法或新闻公告', channel: '浙里办推送', title: '低空安全资讯更新', content: '「${内容标题}」已发布，欢迎前往低空安全普法 / 新闻公告查阅。', variables: '内容标题、内容类型', state: '已启用', updated: '2026-07-20' }
+    ],
     messages: [
-      { id: 'MSG-01', title: '飞行计划信息待补充', content: '您有一条飞行计划信息待补充，请尽快完善后提交。', channel: '系统推送', time: '今天 09:20', state: '已推送', pusher: '综合管理员', read: false },
-      { id: 'MSG-02', title: '低空安全培训报名成功', content: '您已成功报名低空安全培训，请按时参加。', channel: '浙里办推送', time: '昨天 15:30', state: '已推送', pusher: '活动运营员', read: true },
-      { id: 'MSG-03', title: '登记证信息归集成功提醒', content: '您的 UOM 登记证信息已归集成功，可在登记证管理中查看。', channel: '系统推送', time: '07-22 10:06', state: '已推送', pusher: '综合管理员', read: true },
-      { id: 'MSG-04', title: '低空安全宣传月活动预告', content: '低空安全宣传月活动即将开始，欢迎报名参加。', channel: '浙里办推送', time: '07-20 09:00', state: '未推送', pusher: '活动运营员', read: false }
+      { id: 'MSG-01', templateId: 'TPL-FP-01', title: '飞行计划信息待补充', content: '您有一条飞行计划「东钱湖巡检演练」信息待补充，请尽快完善后重新提交。', channel: '系统推送', time: '今天 09:20', state: '已推送', read: false },
+      { id: 'MSG-02', templateId: 'TPL-ACT-01', title: '活动报名成功', content: '您已成功报名「2026 年鄞州区无人机飞行安全培训」，活动时间 2026-08-12 09:00，请按时参加。', channel: '系统推送', time: '昨天 15:30', state: '已推送', read: true },
+      { id: 'MSG-03', templateId: 'TPL-UOM-01', title: '登记证信息归集成功提醒', content: '您的 UOM 登记证「UAS03****81」信息已归集成功，可在登记证管理中查看。', channel: '系统推送', time: '07-22 10:06', state: '已推送', read: true },
+      { id: 'MSG-04', templateId: 'TPL-CHK-01', title: '设备核查结果通知', content: '您的设备「云翼 M30」（序列号 SN-****-0192）核查结果为「通过」。处理意见：证照与机体一致，予以通过。', channel: '系统推送', time: '07-29 16:40', state: '已推送', read: true },
+      { id: 'MSG-05', templateId: 'TPL-NEWS-01', title: '低空安全资讯更新', content: '「夏季低空飞行安全提示」已发布，欢迎前往低空安全普法 / 新闻公告查阅。', channel: '浙里办推送', time: '07-20 09:00', state: '已推送', read: true }
     ],
     users: [
       { id: 'USR-001', name: '陈先生（演示）', type: '个人', idNumber: '3302**********0412', phone: '138****2408', address: '鄞州区（示例地址）', license: '未上传', licenseFileName: '', drones: 2, status: '正常' },
@@ -211,8 +225,10 @@
       { id: 'MT-002', device: 'SL-2026-002', type: '检修', detail: '半年度例行检修，功能正常', operator: '设备维护组', time: '2026-07-18', state: '已完成' }
     ],
     feedbackForms: [
-      { id: 'FORM-01', name: '平台功能与服务反馈表', scene: '通用反馈', fields: [['反馈类型', '单选', '必填'], ['关注主题', '多选', '选填'], ['反馈标题', '文本', '必填'], ['详细说明', '多行文本', '必填'], ['图片附件', '多张图片', '选填']], state: '已发布', updated: '2026-07-20' },
-      { id: 'FORM-02', name: '低空安全隐患线索表', scene: '隐患上报', fields: [['隐患位置', '文本', '必填'], ['隐患类型', '多选', '选填'], ['隐患描述', '多行文本', '必填'], ['现场照片', '多张图片', '选填']], state: '已下架', updated: '2026-06-18' }
+      { id: 'FORM-01', name: '功能建议', scene: '平台功能与服务优化建议', fields: [['反馈标题', '文本', '必填', ''], ['详细说明', '多行文本', '必填', ''], ['关注主题', '多选', '选填', '报名提醒、消息推送、界面体验、其他'], ['图片附件', '多张图片', '选填', '']], state: '已发布', updated: '2026-07-20' },
+      { id: 'FORM-02', name: '问题咨询', scene: '使用问题与政策咨询', fields: [['问题标题', '文本', '必填', ''], ['问题描述', '多行文本', '必填', ''], ['联系电话', '电话', '选填', ''], ['截图附件', '多张图片', '选填', '']], state: '已发布', updated: '2026-07-18' },
+      { id: 'FORM-03', name: '隐患上报', scene: '低空安全隐患线索', fields: [['隐患位置', '文本', '必填', ''], ['隐患类型', '多选', '选填', '未报备飞行、超高飞行、扰民噪声、其他'], ['隐患描述', '多行文本', '必填', ''], ['现场照片', '多张图片', '选填', '']], state: '已发布', updated: '2026-07-15' },
+      { id: 'FORM-04', name: '活动建议', scene: '活动组织与宣传建议', fields: [['建议标题', '文本', '必填', ''], ['建议内容', '多行文本', '必填', ''], ['期望活动类型', '单选', '选填', '安全培训、科普体验、社区宣传、其他']], state: '已下架', updated: '2026-06-18' }
     ],
     linkage: {
       planPush: [

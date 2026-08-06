@@ -220,14 +220,37 @@
   const roleCertificates = () => data.certificates.filter((item) => item.accountRole === state.role);
   const roleDrones = () => data.drones.filter((item) => item.accountRole === state.role);
   const roleFlights = () => data.flights.filter((item) => item.accountRole === state.role || item.owner === data.profiles[state.role]?.name);
+  const normalizeFeedbackField = (row = []) => {
+    const [name = '', type = '文本', required = '选填', options = ''] = Array.isArray(row) ? row : [];
+    const normalizedType = type === '图片' ? '多张图片' : (type || '文本');
+    const needsOptions = normalizedType === '单选' || normalizedType === '多选';
+    return [String(name || ''), normalizedType, required === '必填' || required === true ? '必填' : '选填', needsOptions ? String(options || '') : ''];
+  };
   const normalizeFeedbackForms = (forms) => forms.map((form) => ({
     ...form,
-    fields: Array.isArray(form.fields) ? form.fields.filter((field) => Array.isArray(field) && field[0] !== '是否允许联系').map(([name, type, required]) => [name, type === '图片' ? '多张图片' : type, required]) : []
+    fields: Array.isArray(form.fields)
+      ? form.fields.filter((field) => Array.isArray(field) && field[0] !== '是否允许联系').map(normalizeFeedbackField)
+      : []
   }));
+  const parseFeedbackOptions = (raw) => String(raw || '').split(/[、,，]/u).map((item) => item.trim()).filter(Boolean);
+  const feedbackFieldKey = (name) => {
+    if (/类型/.test(name)) return 'category';
+    if (/标题/.test(name)) return 'title';
+    if (/说明|描述|内容/.test(name)) return 'content';
+    if (/电话|手机/.test(name)) return 'phone';
+    return name;
+  };
+  const publishedFeedbackForms = () => data.feedbackForms.filter((item) => item.state === '已发布');
+  const selectedFeedbackForm = () => {
+    const forms = publishedFeedbackForms();
+    return forms.find((item) => item.id === state.feedbackFormId) || forms[0] || null;
+  };
   const normalizeFeedbacks = (feedbacks) => feedbacks.map((feedback) => {
     const fields = { ...(feedback.fields || {}) };
     delete fields['是否允许联系'];
-    return { ...feedback, fields };
+    const submitterType = feedback.submitterType === '企业用户' || feedback.submitterType === '企业' ? '企业用户' : '个人用户';
+    const submitterName = feedback.submitterName || feedback.submitter || '—';
+    return { ...feedback, fields, submitterType, submitterName };
   });
   const hydratePublicService = () => {
     try {
@@ -266,7 +289,13 @@
         });
       }
       if (Array.isArray(saved.flights)) data.flights = saved.flights;
-      if (Array.isArray(saved.feedbackForms)) data.feedbackForms = normalizeFeedbackForms(saved.feedbackForms);
+      if (Array.isArray(saved.feedbackForms)) {
+        const mapped = normalizeFeedbackForms(saved.feedbackForms);
+        const have = new Set(mapped.map((item) => item.id));
+        const seeds = normalizeFeedbackForms(data.feedbackForms);
+        seeds.forEach((seed) => { if (!have.has(seed.id)) mapped.push(seed); });
+        data.feedbackForms = mapped;
+      }
       if (Array.isArray(saved.messages)) data.messages = normalizeMessages(saved.messages);
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
@@ -276,8 +305,8 @@
     content: item.content || '',
     channel: item.channel === '系统消息' ? '系统推送' : (item.channel || '系统推送'),
     time: item.time || '',
-    state: item.state === '未推送' || item.state === '已推送' ? item.state : '已推送',
-    pusher: item.pusher || '综合管理员',
+    state: '已推送',
+    templateId: item.templateId || '',
     read: Boolean(item.read)
   }));
   const persistPublicService = () => {
@@ -312,7 +341,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, droneDraft: emptyDroneDraft(), flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, droneDraft: emptyDroneDraft(), flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -688,24 +717,57 @@
     return shell(`${pageToolbar('home', `<div class="tabs">${[['all', '全部'], ['unread', '未读']].map(([value, text]) => `<button class="${state.messageView === value ? 'active' : ''}" data-action="message-view" data-value="${value}">${text}</button>`).join('')}</div><button class="secondary-btn" data-action="read-all">全部标为已读</button>`)}${list(rows, (item) => `<article class="list-row"><div><strong>${safe(item.title)}</strong>${item.content ? `<p>${safe(item.content)}</p>` : ''}<div class="meta">${safe(item.time)} · ${item.read ? status('已读') : status('未读')}</div></div><button class="text-link" data-action="read" data-id="${safe(item.id)}">查看</button></article>`)}`, 'messages');
   };
   const feedbackFormControls = () => {
-    const feedbackForm = data.feedbackForms.find((item) => item.id === state.feedbackFormId && item.state === '已发布') || data.feedbackForms.find((item) => item.state === '已发布') || data.feedbackForms[0];
-    const fields = feedbackForm?.fields || [['反馈类型', '单选', '必填'], ['反馈标题', '文本', '必填'], ['详细说明', '多行文本', '必填']];
-    const fieldKey = (name) => name.includes('类型') ? 'category' : name.includes('标题') ? 'title' : name.includes('说明') || name.includes('描述') ? 'content' : name;
-    return fields.map(([name, fieldType, required], index) => {
-      const key = fieldKey(name, index); const must = required === '必填' ? ' required' : '';
-      const options = name.includes('类型') ? ['功能建议', '问题咨询', '活动建议', '其他'] : ['是', '否'];
+    const feedbackForm = selectedFeedbackForm();
+    if (!feedbackForm) return '<div class="empty">暂无可填写的反馈类型，请稍后再试</div>';
+    const fields = (feedbackForm.fields || []).map(normalizeFeedbackField).filter(([name]) => name && name !== '反馈类型');
+    return fields.map(([name, fieldType, required, optionsRaw]) => {
+      const key = feedbackFieldKey(name);
+      const must = required === '必填' ? ' required' : '';
+      const label = `${safe(name)}${required === '必填' ? '' : '（选填）'}`;
+      const options = parseFeedbackOptions(optionsRaw);
       const selectedImages = state.feedbackAttachments[key] || [];
-      return `<label>${safe(name)}${required === '必填' ? '' : '（选填）'}${fieldType === '多行文本' ? `<textarea${must} data-feedback-field="${safe(key)}">${safe(state.feedbackDraft[key] || '')}</textarea>` : fieldType === '单选' ? `<select data-feedback-field="${safe(key)}">${options.map((value) => `<option${state.feedbackDraft[key] === value ? ' selected' : ''}>${safe(value)}</option>`).join('')}</select>` : fieldType === '图片' || fieldType === '多张图片' ? `<input${must} type="file" accept="image/png,image/jpeg" multiple data-feedback-image-field="${safe(key)}" /><small class="form-help">可一次选择多张 JPG/PNG 图片，每张不超过 10 MB。</small>${selectedImages.length ? `<span class="feedback-uploaded-images">已选择 ${selectedImages.length} 张：${selectedImages.map(safe).join('、')}</span>` : ''}` : `<input${must} data-feedback-field="${safe(key)}" value="${safe(state.feedbackDraft[key] || '')}" maxlength="40" />`}</label>`;
+      const current = state.feedbackDraft[key] || '';
+      if (fieldType === '多行文本') return `<label>${label}<textarea${must} data-feedback-field="${safe(key)}">${safe(current)}</textarea></label>`;
+      if (fieldType === '单选') {
+        const opts = options.length ? options : ['请选择'];
+        return `<label>${label}<select${must} data-feedback-field="${safe(key)}"><option value="">请选择</option>${opts.map((value) => `<option value="${safe(value)}"${current === value ? ' selected' : ''}>${safe(value)}</option>`).join('')}</select></label>`;
+      }
+      if (fieldType === '多选') {
+        const selected = new Set(parseFeedbackOptions(current));
+        const opts = options.length ? options : ['选项一', '选项二'];
+        return `<fieldset class="feedback-multi"${required === '必填' ? ' data-feedback-multi-required="true"' : ''} data-feedback-multi-field="${safe(key)}"><legend>${label}</legend><div class="feedback-multi-options">${opts.map((value) => `<label class="feedback-check"><input type="checkbox" data-feedback-multi-field="${safe(key)}" data-feedback-option="${safe(value)}"${selected.has(value) ? ' checked' : ''} /><span>${safe(value)}</span></label>`).join('')}</div></fieldset>`;
+      }
+      if (fieldType === '图片' || fieldType === '多张图片') {
+        return `<label>${label}<input${must} type="file" accept="image/png,image/jpeg" multiple data-feedback-image-field="${safe(key)}" /><small class="form-help">可一次选择多张 JPG/PNG 图片，每张不超过 10 MB。</small>${selectedImages.length ? `<span class="feedback-uploaded-images">已选择 ${selectedImages.length} 张：${selectedImages.map(safe).join('、')}</span>` : ''}</label>`;
+      }
+      if (fieldType === '电话') return `<label>${label}<input${must} type="tel" data-feedback-field="${safe(key)}" value="${safe(current)}" maxlength="20" placeholder="请输入联系电话" /></label>`;
+      return `<label>${label}<input${must} data-feedback-field="${safe(key)}" value="${safe(current)}" maxlength="40" /></label>`;
     }).join('');
   };
+  const feedbackTypePicker = () => {
+    const forms = publishedFeedbackForms();
+    if (!forms.length) return '';
+    const selectedId = forms.some((item) => item.id === state.feedbackFormId) ? state.feedbackFormId : forms[0].id;
+    if (state.feedbackFormId !== selectedId) state.feedbackFormId = selectedId;
+    const selected = forms.find((item) => item.id === selectedId) || forms[0];
+    const open = state.feedbackTypeOpen;
+    return `<div class="feedback-type-picker${open ? ' is-open' : ''}">
+      <span class="field-label">反馈类型</span>
+      <button type="button" class="feedback-type-trigger" data-action="toggle-feedback-type" aria-expanded="${open ? 'true' : 'false'}" aria-haspopup="listbox" aria-label="选择反馈类型">
+        <span>${safe(selected.name)}</span>
+        <span class="feedback-type-caret" aria-hidden="true"></span>
+      </button>
+      ${open ? `<ul class="feedback-type-menu" role="listbox" aria-label="反馈类型列表">${forms.map((item) => `<li><button type="button" class="feedback-type-option${item.id === selectedId ? ' is-active' : ''}" data-action="select-feedback-form" data-id="${safe(item.id)}" role="option" aria-selected="${item.id === selectedId ? 'true' : 'false'}"><span>${safe(item.name)}</span>${item.id === selectedId ? '<span class="feedback-type-check" aria-hidden="true">✓</span>' : ''}</button></li>`).join('')}</ul>` : ''}
+    </div>`;
+  };
   const feedback = () => {
-    const forms = data.feedbackForms.filter((item) => item.state === '已发布');
-    const selectedId = forms.some((item) => item.id === state.feedbackFormId) ? state.feedbackFormId : forms[0]?.id;
-    if (selectedId && state.feedbackFormId !== selectedId) state.feedbackFormId = selectedId;
-    const picker = forms.length > 1
-      ? `<section class="section feedback-form-picker"><div class="tabs">${forms.map((item) => `<button class="${item.id === selectedId ? 'active' : ''}" data-action="select-feedback-form" data-id="${safe(item.id)}">${safe(item.name)}</button>`).join('')}</div></section>`
-      : '';
-    return shell(`${pageToolbar('profile')}${picker}<section class="section feedback-form-panel"><h2 class="feedback-form-title">提交意见反馈</h2><form class="form-stack" id="feedback-form">${feedbackFormControls()}</form><div class="actions"><button class="primary-btn" data-action="submit-feedback">提交反馈</button></div></section>`, 'profile');
+    const forms = publishedFeedbackForms();
+    if (!forms.length) {
+      return shell(`${pageToolbar('profile')}<section class="section feedback-form-panel"><h2 class="feedback-form-title">提交意见反馈</h2><div class="empty">暂无已发布的反馈类型</div></section>`, 'profile');
+    }
+    const selectedId = forms.some((item) => item.id === state.feedbackFormId) ? state.feedbackFormId : forms[0].id;
+    if (state.feedbackFormId !== selectedId) state.feedbackFormId = selectedId;
+    return shell(`${pageToolbar('profile')}<section class="section feedback-form-panel"><h2 class="feedback-form-title">提交意见反馈</h2><form class="form-stack" id="feedback-form">${feedbackTypePicker()}${feedbackFormControls()}</form><div class="actions"><button class="primary-btn" data-action="submit-feedback">提交反馈</button></div></section>`, 'profile');
   };
   const detail = (kind, id) => {
     const source = kind === 'certificate' ? roleCertificates() : kind === 'drone' ? roleDrones() : kind === 'flight' ? roleFlights() : data.articles;
@@ -798,7 +860,7 @@
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">报名信息</h2><div class="enrollment-summary"><b>${safe(item.title)}</b><span>报名状态：已报名</span><span>活动时间：${safe(item.startTime)} 至 ${safe(item.endTime)}</span><span>活动地点：${safe(item.place)}</span>${submittedFields}</div><div class="modal-actions"><button class="primary-btn" data-action="close-modal">我知道了</button></div></section></div>`;
     }
     if (type === 'feedback') {
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">提交意见反馈</h2><form class="form-stack" id="feedback-form">${feedbackFormControls()}</form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-feedback">提交反馈</button></div></section></div>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">提交意见反馈</h2><form class="form-stack" id="feedback-form">${feedbackTypePicker()}${feedbackFormControls()}</form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-feedback">提交反馈</button></div></section></div>`;
     }
     if (type === 'certificate') {
       const reviewing = state.ocr.status === 'review';
@@ -900,6 +962,13 @@
     if (returnFocus) setTimeout(() => document.querySelector(returnFocus)?.focus(), 0);
   };
   document.addEventListener('click', (event) => {
+    if (state.feedbackTypeOpen && !event.target.closest?.('.feedback-type-picker')) {
+      state.feedbackTypeOpen = false;
+      if (!event.target.closest?.('[data-go],[data-action]')) {
+        render();
+        return;
+      }
+    }
     const target = event.target.closest('[data-go],[data-action]'); if (!target) return;
     if (target.dataset.go) { go(target.dataset.go); return; }
     const action = target.dataset.action;
@@ -1031,7 +1100,18 @@
     if (action === 'play-video') announce('正在播放示例视频（mock 占位，不加载真实视频文件）');
     if (action === 'open-uom-platform') announce('已进入 UOM 平台申报入口演示；当前静态原型不连接真实平台');
     if (action === 'message-view') { state.messageView = target.dataset.value; render(); }
-    if (action === 'select-feedback-form') { state.feedbackFormId = target.dataset.id; state.feedbackDraft = {}; state.feedbackAttachments = {}; render(); }
+    if (action === 'toggle-feedback-type') { state.feedbackTypeOpen = !state.feedbackTypeOpen; render(); return; }
+    if (action === 'select-feedback-form') {
+      const nextId = target.dataset.id || target.value || '';
+      state.feedbackTypeOpen = false;
+      if (nextId && nextId !== state.feedbackFormId) {
+        state.feedbackFormId = nextId;
+        state.feedbackDraft = {};
+        state.feedbackAttachments = {};
+      }
+      render();
+      return;
+    }
     if (action === 'refresh-profile-sync') {
       const profile = data.profiles[state.role];
       profile.syncState = '已同步';
@@ -1213,9 +1293,15 @@
     }
     if (action === 'submit-feedback') {
       const form = document.querySelector('#feedback-form'); if (form && !form.reportValidity()) return;
+      const requiredMulti = [...document.querySelectorAll('[data-feedback-multi-required="true"]')];
+      if (requiredMulti.some((box) => !box.querySelector('input[type="checkbox"]:checked'))) { announce('请完整填写必填项'); return; }
       const draft = state.feedbackDraft;
-      const feedbackForm = data.feedbackForms.find((item) => item.id === state.feedbackFormId && item.state === '已发布') || data.feedbackForms.find((item) => item.state === '已发布') || data.feedbackForms[0];
-      data.feedbacks.unshift({ id: `FB-${data.now.replaceAll('-', '')}-${String(data.feedbacks.length + 1).padStart(3, '0')}`, formId: feedbackForm?.id || '', category: draft.category || '功能建议', title: draft.title || '未命名反馈', content: draft.content || '未填写详细说明', fields: { ...draft }, attachments: { ...state.feedbackAttachments }, time: `${data.now} 14:36` });
+      const feedbackForm = selectedFeedbackForm();
+      const title = draft.title || Object.entries(draft).find(([key, value]) => key !== 'phone' && key !== 'category' && value)?.[1] || '未命名反馈';
+      const content = draft.content || Object.entries(draft).find(([key, value]) => key !== 'title' && key !== 'phone' && key !== 'category' && value)?.[1] || '未填写详细说明';
+      const submitterType = state.role === 'company' ? '企业用户' : '个人用户';
+      const submitterName = state.role === 'company' ? (data.profiles.company?.name || '企业用户') : (data.profiles.personal?.name || '个人用户');
+      data.feedbacks.unshift({ id: `FB-${data.now.replaceAll('-', '')}-${String(data.feedbacks.length + 1).padStart(3, '0')}`, formId: feedbackForm?.id || '', category: feedbackForm?.name || draft.category || '未分类', submitterType, submitterName, title: String(title), content: String(content), fields: { ...draft }, attachments: { ...state.feedbackAttachments }, time: `${data.now} 14:36` });
       state.feedbackDraft = {};
       state.feedbackAttachments = {};
       persistPublicService();
@@ -1342,6 +1428,13 @@
     if (event.target.dataset?.memberField) { state.memberDraft[event.target.dataset.memberField] = event.target.value; return; }
     if (event.target.dataset?.assignField) { state.assignDraft[event.target.dataset.assignField] = event.target.value; return; }
     if (event.target.dataset?.tagField) { state.tagDraft[event.target.dataset.tagField] = event.target.checked; return; }
+    if (event.target.dataset?.feedbackMultiField && event.target.dataset?.feedbackOption !== undefined) {
+      const key = event.target.dataset.feedbackMultiField;
+      const selected = [...document.querySelectorAll(`input[type="checkbox"][data-feedback-multi-field="${key}"]:checked`)].map((node) => node.dataset.feedbackOption);
+      state.feedbackDraft[key] = selected.join('、');
+      return;
+    }
+    if (event.target.dataset?.feedbackField) { state.feedbackDraft[event.target.dataset.feedbackField] = event.target.value; return; }
     if (event.target.dataset?.feedbackImageField) {
       const files = [...(event.target.files || [])];
       if (!files.length || files.some((file) => !['image/png', 'image/jpeg'].includes(file.type))) { announce('请上传 JPG 或 PNG 格式的图片'); return; }

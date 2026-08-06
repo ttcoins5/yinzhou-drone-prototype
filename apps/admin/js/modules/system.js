@@ -36,7 +36,7 @@
       { id: '8', parentId: '0', name: '志愿者管理', type: '目录', order: 8, perms: '', component: '', status: '正常' },
       { id: '81', parentId: '8', name: '志愿者名册', type: '菜单', order: 1, perms: 'drone:volunteer:list', component: 'drone/volunteer/index', status: '正常' },
       { id: '10', parentId: '0', name: '消息管理', type: '目录', order: 10, perms: '', component: '', status: '正常' },
-      { id: '101', parentId: '10', name: '消息推送', type: '菜单', order: 1, perms: 'drone:message:list', component: 'drone/message/index', status: '正常' },
+      { id: '101', parentId: '10', name: '消息模板', type: '菜单', order: 1, perms: 'drone:message:list', component: 'drone/message/index', status: '正常' },
       { id: '11', parentId: '0', name: '意见反馈管理', type: '目录', order: 11, perms: '', component: '', status: '正常' },
       { id: '111', parentId: '11', name: '意见反馈', type: '菜单', order: 1, perms: 'drone:feedback:list', component: 'drone/feedback/index', status: '正常' },
       { id: '12', parentId: '0', name: '系统管理', type: '目录', order: 12, perms: '', component: '', status: '正常' },

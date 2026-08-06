@@ -147,35 +147,65 @@
         });
       }
       if (Array.isArray(saved.flights)) data.flights = saved.flights;
-      if (Array.isArray(saved.feedbackForms)) data.feedbackForms = normalizeFeedbackForms(saved.feedbackForms);
+      if (Array.isArray(saved.feedbackForms)) {
+        const mapped = normalizeFeedbackForms(saved.feedbackForms);
+        const have = new Set(mapped.map((item) => item.id));
+        const seeds = normalizeFeedbackForms(data.feedbackForms);
+        seeds.forEach((seed) => { if (!have.has(seed.id)) mapped.push(seed); });
+        data.feedbackForms = mapped;
+      }
       if (Array.isArray(saved.messages)) data.messages = normalizeMessages(saved.messages);
+      if (Array.isArray(saved.messageTemplates)) data.messageTemplates = normalizeMessageTemplates(saved.messageTemplates);
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
+  const normalizeMessageTemplates = (templates) => templates.map((item) => ({
+    ...item,
+    id: item.id || '',
+    name: item.name || item.title || '',
+    scene: item.scene || '系统业务',
+    trigger: item.trigger || '',
+    channel: item.channel === '系统消息' || item.channel === '浙里办推送' ? (item.channel === '系统消息' ? '系统推送' : '浙里办推送') : (item.channel || '系统推送'),
+    title: item.title || item.name || '',
+    content: item.content || '',
+    variables: item.variables || '—',
+    state: item.state === '已停用' ? '已停用' : '已启用',
+    updated: item.updated || data.now
+  }));
   const normalizeMessages = (messages) => messages.map((item) => ({
     ...item,
     title: item.title || '',
     content: item.content || '',
     channel: item.channel === '系统消息' ? '系统推送' : (item.channel || '系统推送'),
     time: item.time || '',
-    state: item.state === '未推送' || item.state === '已推送' ? item.state : '已推送',
-    pusher: item.pusher || '综合管理员',
+    pushedAt: item.pushedAt || item.time || '',
+    receiver: item.receiver || '',
+    receiverType: item.receiverType || '',
+    state: '已推送',
+    templateId: item.templateId || '',
     read: Boolean(item.read)
   }));
   const normalizeFeedbackForms = (forms) => forms.map((form) => ({
     ...form,
-    fields: Array.isArray(form.fields) ? form.fields.filter((field) => Array.isArray(field) && field[0] !== '是否允许联系').map(([name, type, required]) => [name, type === '图片' ? '多张图片' : type, required]) : []
+    fields: Array.isArray(form.fields)
+      ? form.fields
+        .filter((field) => Array.isArray(field) && field[0] !== '是否允许联系')
+        .map((row) => (window.AdminUI?.normalizeFeedbackField ? AdminUI.normalizeFeedbackField(row) : [row[0], row[1] === '图片' ? '多张图片' : row[1], row[2] || '选填', row[3] || '']))
+      : []
   }));
   const normalizeFeedbacks = (feedbacks) => feedbacks.map((feedback) => {
     const fields = { ...(feedback.fields || {}) };
     delete fields['是否允许联系'];
-    return { ...feedback, fields };
+    const submitterType = feedback.submitterType === '企业用户' || feedback.submitterType === '企业' ? '企业用户' : '个人用户';
+    const submitterName = feedback.submitterName || feedback.submitter || '—';
+    return { ...feedback, fields, submitterType, submitterName };
   });
   const persistPublicService = () => {
-    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, uomGuide: data.uomGuide })); } catch {}
+    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, messageTemplates: data.messageTemplates, uomGuide: data.uomGuide })); } catch {}
   };
   hydrateProfile();
   hydrateLedger();
   hydratePublicService();
+  data.messageTemplates = normalizeMessageTemplates(data.messageTemplates || []);
   data.messages = normalizeMessages(data.messages || []);
   const ledgers = {
     blacklist: [{id:'BL-001',name:'用户甲',type:'个人用户',reason:'治理记录',state:'已拉黑',operatedBy:'—',operatedAt:'—'},{id:'BL-002',name:'企业乙',type:'企业用户',reason:'核查中',state:'已拉黑',operatedBy:'—',operatedAt:'—'}],
@@ -291,12 +321,12 @@
     ['宣传科普管理', [['laws','低空安全普法'],['news','新闻公告']]],
     ['UOM流程指导', [['guides','操作手册'],['faq','常见问题']]],
     ['志愿者管理', [['volunteers','志愿者名册']]],
-    ['消息管理', [['messages','消息推送']]],
+    ['消息管理', [['messages','消息模板']]],
     ['意见反馈管理', [['feedback','意见反馈']]],
     ['系统管理', [['sys-users','用户管理'],['roles','角色管理'],['menus','菜单管理'],['dicts','字典管理']]]
   ];
   const meta = {
-    users:['用户管理','查看个人用户及其设备、UOM 登记证与飞行活动记录。',''],companies:['企业管理','查看企业账户、授权账号、设备及飞行活动记录。',''],blacklist:['黑名单','拉黑/取消拉黑用户、企业及其授权账号。','新增黑名单'],accounts:['用户管理','维护后台系统用户。','新增'],['sys-users']:['用户管理','维护后台系统用户账号、状态与角色分配。','新增'],roles:['角色管理','维护后台角色、权限字符与状态。','新增'],menus:['菜单管理','维护系统菜单目录、路由与按钮权限标识。','新增'],dicts:['字典管理','维护系统字典类型。','新增'],config:['参数设置','维护系统参数键名与键值。','新增'],['login-logs']:['登录日志','查看后台登录访问记录。','导出'],audit:['操作日志','查看数据访问、操作记录与审计检索。','导出日志'],certificates:['UOM 登记证','查看登记证载明的 11 项信息、更新记录及注销记录。','手动注销'],drones:['无人机管理','查看与 UOM 登记证一致的航空器基础字段及持有/使用分组。','新增核查'],verification:['设备核查','','新增核查'],flights:['飞行计划','管理报备信息、修改历史与执行确认记录。','导出计划'],activities:['活动管理','新建、编辑、下架和删除活动；详情页直接展示报名名单并可一键确认，确认后用户端不可报名。','新建活动'],enrollments:['活动报名','查看报名填写内容；一键确认请在活动详情本场报名名单中完成。','导出报名'],laws:['低空安全普法','新建、编辑、下架、删除政策法规，含发布单位、生效起止、排序与封面（图片/视频）。','新建普法'],news:['新闻公告','新建、编辑、下架新闻公告；含排序，封面可上传图片或视频。','新建公告'],guides:['操作手册','维护流程标题、摘要、编号排序与图文说明；可新建、编辑、上架/下架与删除。','新建流程'],faq:['常见问题','维护用户端 FAQ 问题、排序与图文解答；可新建、编辑、下架与删除。','新建问题'],volunteers:['志愿者名册','维护线下确认后的低空爱好者与社区网格员名册，支持按姓名、区域查询与移除。','添加志愿者'],['rid-modules']:['RID模块','维护 RID 模块台账，支持新增入库、配发绑定与回收。','新增RID'],messages:['消息管理','维护消息标题、内容、推送时间、消息类型、推送状态与推送人。','新建消息'],feedback:['意见反馈','收集用户反馈内容，维护用户端反馈表单与多图上传字段。','新建表单'],['shoulder-lights']:['肩灯配发','','新增肩带'],alerts:['侦测预警','接收肩灯感知数据并与飞行计划比对，对未报备飞行生成预警与证据包。','处置告警'],interface:['外部接口','对接市级低空平台、智巡车防与肩灯厂商侦测平台。','同步数据']
+    users:['用户管理','查看个人用户及其设备、UOM 登记证与飞行活动记录。',''],companies:['企业管理','查看企业账户、授权账号、设备及飞行活动记录。',''],blacklist:['黑名单','拉黑/取消拉黑用户、企业及其授权账号。','新增黑名单'],accounts:['用户管理','维护后台系统用户。','新增'],['sys-users']:['用户管理','维护后台系统用户账号、状态与角色分配。','新增'],roles:['角色管理','维护后台角色、权限字符与状态。','新增'],menus:['菜单管理','维护系统菜单目录、路由与按钮权限标识。','新增'],dicts:['字典管理','维护系统字典类型。','新增'],config:['参数设置','维护系统参数键名与键值。','新增'],['login-logs']:['登录日志','查看后台登录访问记录。','导出'],audit:['操作日志','查看数据访问、操作记录与审计检索。','导出日志'],certificates:['UOM 登记证','查看登记证载明的 11 项信息、更新记录及注销记录。','手动注销'],drones:['无人机管理','查看与 UOM 登记证一致的航空器基础字段及持有/使用分组。','新增核查'],verification:['设备核查','','新增核查'],flights:['飞行计划','管理报备信息、修改历史与执行确认记录。','导出计划'],activities:['活动管理','新建、编辑、下架和删除活动；详情页直接展示报名名单并可一键确认，确认后用户端不可报名。','新建活动'],enrollments:['活动报名','查看报名填写内容；一键确认请在活动详情本场报名名单中完成。','导出报名'],laws:['低空安全普法','新建、编辑、下架、删除政策法规，含发布单位、生效起止、排序与封面（图片/视频）。','新建普法'],news:['新闻公告','新建、编辑、下架新闻公告；含排序，封面可上传图片或视频。','新建公告'],guides:['操作手册','维护流程标题、摘要、编号排序与图文说明；可新建、编辑、上架/下架与删除。','新建流程'],faq:['常见问题','维护用户端 FAQ 问题、排序与图文解答；可新建、编辑、下架与删除。','新建问题'],volunteers:['志愿者名册','维护线下确认后的低空爱好者与社区网格员名册，支持按姓名、区域查询与移除。','添加志愿者'],['rid-modules']:['RID模块','维护 RID 模块台账，支持新增入库、配发绑定与回收。','新增RID'],messages:['消息模板','查看系统按业务场景自动触达的消息模板；不支持人工新建与主动推送。',''],feedback:['意见反馈','收集用户反馈内容，维护用户端反馈表单与多图上传字段。','新建表单'],['shoulder-lights']:['肩灯配发','','新增肩带'],alerts:['侦测预警','接收肩灯感知数据并与飞行计划比对，对未报备飞行生成预警与证据包。','处置告警'],interface:['外部接口','对接市级低空平台、智巡车防与肩灯厂商侦测平台。','同步数据']
   };
   const route = () => (location.hash || (state.session ? '#/dashboard' : '#/login')).replace('#/','').split('?')[0];
   const routeLabel = (value = route()) => {
@@ -328,6 +358,8 @@
     if (pieces[0] === 'form' && (pieces[1] === 'users' || pieces[1] === 'companies')) {
       return pieces[2] && pieces[2] !== 'new' ? `detail/${pieces[1]}/${pieces[2]}` : pieces[1];
     }
+    if (pieces[0] === 'form' && pieces[1] === 'messages') return 'messages';
+    if (pieces[0] === 'message-records' || (pieces[0] === 'detail' && pieces[1] === 'message-records')) return 'messages';
     return value;
   };
   const ensureTab = (value = route()) => {
@@ -509,14 +541,17 @@
       guides:data.articles.filter((x) => x.kind === '指引'),faq:(data.uomGuide.faqs || []).map((item) => ({ id:item.id, question:item.question, answer:item.answer, mediaType:item.mediaType || '图文', updated:item.updated || data.uomGuide.updated, status:item.status || '已发布', sort: Number(item.sort) > 0 ? Number(item.sort) : 999 })),
       volunteers: ledgers.volunteers,
       ['rid-modules']: ledgers.ridModules,
-      messages:data.messages.map((item) => ({
+      messages:(data.messageTemplates || []).map((item) => ({
         id: item.id,
+        name: item.name,
+        scene: item.scene,
+        trigger: item.trigger,
+        channel: item.channel === '系统消息' ? '系统推送' : (item.channel || '系统推送'),
         title: item.title,
         content: item.content || '',
-        channel: item.channel === '系统消息' ? '系统推送' : (item.channel || '系统推送'),
-        time: item.time,
-        state: item.state === '未推送' || item.state === '已推送' ? item.state : '已推送',
-        pusher: item.pusher || '综合管理员'
+        variables: item.variables || '—',
+        state: item.state === '已停用' ? '已停用' : '已启用',
+        updated: item.updated || data.now
       })),
       feedback:data.feedbacks,
       interface:[{id:'INT-001',name:'市级低空飞行服务管理平台',type:'用户/设备/飞行计划上报',state:'待接入'},{id:'INT-002',name:'鄞州智巡车防一体化系统',type:'飞行计划推送/比对结果推送',state:'待接入'},{id:'INT-003',name:'肩灯厂商侦测平台',type:'定时轮询感知数据',state:'待接入'}]
@@ -543,19 +578,19 @@
       news: ['title', 'sort', 'status', 'date'],
       guides: ['title', 'date', 'views'],
       faq: ['question', 'answer', 'updated', 'status'],
-      messages: ['title', 'content', 'time', 'channel', 'state', 'pusher'],
+      messages: ['id', 'name', 'scene', 'channel', 'state', 'updated'],
       ['shoulder-lights']: ['id', 'state', 'holder', 'unit', 'issuedAt', 'returnedAt'],
       interface: ['name', 'type', 'state']
     }[key];
     return preferred || Object.keys(rows[0] || {}).filter((x) => x !== 'id' && typeof (rows[0] || {})[x] !== 'object').slice(0, 5);
   };
-  const label = (key) => ({id:'编号',name:'姓名',type:'账号身份',idNumber:'身份证号',phone:'手机号码',address:'地址',license:'飞行执照图片',licenseFileName:'执照文件名',drones:'设备数',contact:'授权人',accounts:'账号数',drone:'飞行设备',registrationMark:'登记标志',manufacturerModel:'航空器型号和制造人',serialNumber:'序号',aircraftName:'产品名称',emptyWeight:'空机重量',maxTakeoffWeight:'最大起飞重量',aircraftType:'类型',issuedTo:'本证发给',mobilePhone:'联系手机',registrationStatus:'登记状态',registrationDate:'注册日期',state:'状态',updated:'更新时间',model:'设备型号',sn:'设备序列号',updatedAt:'更新时间',owner:'归属',group:'设备分组',manageState:'管理状态',title:'计划名称',time:'计划时间',area:'飞行区域',status:'发布状态',pinned:'置顶',sort:'排序',executed:'执行状态',place:'地点',operator:'通信联络人',operatorPhone:'通信联络电话',activityType:'飞行活动类型',missionNature:'任务性质',controlMode:'操控模式',flightMode:'飞行模式',startAt:'预计开始时间',endAt:'预计结束时间',maxAltitude:'最大飞行高度',takeoffSite:'起降备降场地',purpose:'任务性质',approval:'审批材料',role:'角色',scope:'服务范围',reason:'原因',applicant:'报名人',source:'来源',category:'类别',rule:'规则',holder:'持有人',activities:'参与活动',zone:'管控区域',kind:'内容类型',mediaType:'图文/视频',coverImage:'封面',duration:'时长',date:'日期',views:'阅读量',unit:'领用单位',issuedAt:'配发时间',returnedAt:'回收时间',device:'设备编号',detail:'说明',summary:'摘要',question:'问题',answer:'富文本解答',startTime:'开始时间',endTime:'结束时间',enrollStart:'报名开始',enrollEnd:'报名截止',enrolled:'已报名',capacity:'名额',enrolledQuota:'已报名/名额',confirmState:'报名确认状态',organizer:'主办单位',operatedBy:'操作人',operatedAt:'操作时间',scene:'适用场景',channel:'消息类型',content:'消息内容',pusher:'推送人',bound:'统一账号绑定',ridModule:'RID 模块编号',ridState:'RID 配发状态',volunteerType:'志愿者类型',volunteerName:'关联志愿者',confirmedAt:'线下确认日期',effectiveDate:'生效起止',sort:'排序',ownerType:'权属',checkType:'核查类型',checkMethod:'核查方式',checkPlace:'核查地点',result:'核查结果',issueDesc:'问题描述',suggestion:'处理意见',followUpDate:'计划跟进日期',checkDate:'核查日期',droneId:'关联设备'})[key] || key;
+  const label = (key) => ({id:'编号',name:'姓名',type:'账号身份',idNumber:'身份证号',phone:'手机号码',address:'地址',license:'飞行执照图片',licenseFileName:'执照文件名',drones:'设备数',contact:'授权人',accounts:'账号数',drone:'飞行设备',registrationMark:'登记标志',manufacturerModel:'航空器型号和制造人',serialNumber:'序号',aircraftName:'产品名称',emptyWeight:'空机重量',maxTakeoffWeight:'最大起飞重量',aircraftType:'类型',issuedTo:'本证发给',mobilePhone:'联系手机',registrationStatus:'登记状态',registrationDate:'注册日期',state:'状态',updated:'更新时间',model:'设备型号',sn:'设备序列号',updatedAt:'更新时间',owner:'归属',group:'设备分组',manageState:'管理状态',title:'计划名称',time:'计划时间',area:'飞行区域',status:'发布状态',pinned:'置顶',sort:'排序',executed:'执行状态',place:'地点',operator:'通信联络人',operatorPhone:'通信联络电话',activityType:'飞行活动类型',missionNature:'任务性质',controlMode:'操控模式',flightMode:'飞行模式',startAt:'预计开始时间',endAt:'预计结束时间',maxAltitude:'最大飞行高度',takeoffSite:'起降备降场地',purpose:'任务性质',approval:'审批材料',role:'角色',scope:'服务范围',reason:'原因',applicant:'报名人',source:'来源',category:'类别',rule:'规则',holder:'持有人',activities:'参与活动',zone:'管控区域',kind:'内容类型',mediaType:'图文/视频',coverImage:'封面',duration:'时长',date:'日期',views:'阅读量',unit:'领用单位',issuedAt:'配发时间',returnedAt:'回收时间',device:'设备编号',detail:'说明',summary:'摘要',question:'问题',answer:'富文本解答',startTime:'开始时间',endTime:'结束时间',enrollStart:'报名开始',enrollEnd:'报名截止',enrolled:'已报名',capacity:'名额',enrolledQuota:'已报名/名额',confirmState:'报名确认状态',organizer:'主办单位',operatedBy:'操作人',operatedAt:'操作时间',scene:'适用场景',channel:'消息类型',content:'消息内容',bound:'统一账号绑定',ridModule:'RID 模块编号',ridState:'RID 配发状态',volunteerType:'志愿者类型',volunteerName:'关联志愿者',confirmedAt:'线下确认日期',effectiveDate:'生效起止',sort:'排序',ownerType:'权属',checkType:'核查类型',checkMethod:'核查方式',checkPlace:'核查地点',result:'核查结果',issueDesc:'问题描述',suggestion:'处理意见',followUpDate:'计划跟进日期',checkDate:'核查日期',droneId:'关联设备'})[key] || key;
   const flightAreaText = (item) => item.area || [item.city || '宁波市鄞州区', item.street].filter(Boolean).join('') || '—';
   const flightTimeText = (item) => item.time || (item.startAt && item.endAt ? `${item.startAt.replace('T', ' ')}—${item.endAt.replace('T', ' ').slice(11)}` : '—');
   const droneRegistrationState = (item) => (item.state === '已注销' || data.uomValue(item, 'registrationStatus') === '已注销') ? '已注销' : '有效';
-  const statusValue = (key, item) => state.overrides.get(`${key}:${item.id}`) || (key === 'drones' && state.disabledDrones.has(item.id) ? '已禁用' : key === 'flights' ? (item.executed || '—') : key === 'enrollments' ? (item.state || '—') : key === 'messages' ? (item.channel || '系统推送') : key === 'verification' ? (item.result || item.state || '—') : item.status || item.state || item.executed || '—');
+  const statusValue = (key, item) => state.overrides.get(`${key}:${item.id}`) || (key === 'drones' && state.disabledDrones.has(item.id) ? '已禁用' : key === 'flights' ? (item.executed || '—') : key === 'enrollments' ? (item.state || '—') : key === 'messages' ? (item.state || '已启用') : key === 'verification' ? (item.result || item.state || '—') : item.status || item.state || item.executed || '—');
   const columnLabel = (key, column) => {
-    if (key === 'messages') return ({ title: '消息标题', content: '消息内容', time: '推送时间', channel: '消息类型', state: '状态', pusher: '推送人' })[column] || label(column);
+    if (key === 'messages') return ({ id: '模板编号', name: '模板名称', scene: '业务场景', trigger: '触发条件', channel: '触达渠道', title: '消息标题', content: '消息内容', variables: '变量说明', state: '启用状态', updated: '更新时间' })[column] || label(column);
     if (key === 'companies' && column === 'name') return '企业名称';
     if (key === 'companies' && column === 'status') return '状态';
     if (key === 'rid-modules' && column === 'id') return '模块编号';
@@ -570,6 +605,10 @@
     if (key === 'verification' && column === 'serialNumber') return '设备序列号';
     if (key === 'verification' && column === 'operator') return '核查人';
     if (key === 'volunteers' && column === 'area') return '所属区域';
+    if (key === 'verification' && column === 'serialNumber') return '设备序列号';
+    if (key === 'feedback' && column === 'category') return '反馈类型';
+    if (key === 'feedback' && column === 'title') return '反馈标题';
+    if (key === 'feedback' && column === 'time') return '提交时间';
     if (key === 'volunteers' && column === 'state') return '在册状态';
     return label(column);
   };
@@ -583,10 +622,10 @@
     if (key === 'activities' && column === 'enrolledQuota') return `${safe(item.enrolled ?? 0)} / ${safe(item.capacity ?? 0)}`;
     if (key === 'activities' && column === 'confirmState') return status(activityConfirmState(item));
     if (key === 'enrollments' && column === 'state') return status(item.state || '—');
-    if (key === 'messages' && column === 'state') return status(item.state || '未推送');
-    if (key === 'messages' && column === 'content') {
-      const text = String(item.content || '');
-      return safe(text.length > 36 ? `${text.slice(0, 36)}…` : (text || '—'));
+    if (key === 'messages' && column === 'state') return status(item.state || '已启用');
+    if (key === 'messages' && column === 'trigger') {
+      const text = String(item.trigger || '');
+      return safe(text.length > 28 ? `${text.slice(0, 28)}…` : (text || '—'));
     }
     if (key === 'rid-modules' && column === 'state') return status(item.state || '—');
     if (key === 'rid-modules' && column === 'id') return safe(item.id);
@@ -603,17 +642,18 @@
     }
     return ['status','state','executed','license'].includes(column) ? status(column === 'license' ? raw : statusValue(key, item)) : safe(raw);
   };
-  const operationLabel = (key) => ({users:'拉黑',companies:'拉黑',blacklist:'取消拉黑',accounts:'配置权限',audit:'查看审计',certificates:'手动注销',drones:'禁用设备',verification:'完成核查',flights:'查看执行',activities:'下架活动',enrollments:'确认报名',laws:'下架内容',news:'下架内容',guides:'下架',faq:'下架问题',volunteers:'移除志愿者',['rid-modules']:'回收模块',messages:'推送消息',['shoulder-lights']:'归还肩灯',alerts:'记录处置',interface:'同步数据'})[key] || '变更状态';
-  const operationResult = (key) => ({users:'已拉黑',companies:'已拉黑',blacklist:'已取消拉黑',accounts:'已调整',audit:'已查阅',certificates:'已注销',drones:'已禁用',verification:'已完成',flights:'已查看',activities:'已下架',enrollments:'已确认',laws:'已下架',news:'已下架',guides:'已下架',faq:'已下架',volunteers:'已移除',['rid-modules']:'已回收',messages:'已推送',['shoulder-lights']:'已归还',alerts:'已处置',interface:'已同步'})[key] || '已更新';
+  const operationLabel = (key) => ({users:'拉黑',companies:'拉黑',blacklist:'取消拉黑',accounts:'配置权限',audit:'查看审计',certificates:'手动注销',drones:'禁用设备',verification:'完成核查',flights:'查看执行',activities:'下架活动',enrollments:'确认报名',laws:'下架内容',news:'下架内容',guides:'下架',faq:'下架问题',volunteers:'移除志愿者',['rid-modules']:'回收模块',messages:'启用模板',['shoulder-lights']:'归还肩灯',alerts:'记录处置',interface:'同步数据'})[key] || '变更状态';
+  const operationResult = (key) => ({users:'已拉黑',companies:'已拉黑',blacklist:'已取消拉黑',accounts:'已调整',audit:'已查阅',certificates:'已注销',drones:'已禁用',verification:'已完成',flights:'已查看',activities:'已下架',enrollments:'已确认',laws:'已下架',news:'已下架',guides:'已下架',faq:'已下架',volunteers:'已移除',['rid-modules']:'已回收',messages:'已更新',['shoulder-lights']:'已归还',alerts:'已处置',interface:'已同步'})[key] || '已更新';
   const table = (key, rows = rowsFor(key)) => {
     const cols = columnsFor(key, rows); const visible = rows.filter((row) => (!state.query || Object.values(row).filter((v) => typeof v !== 'object').join(' ').toLowerCase().includes(state.query.toLowerCase())) && (state.filter === '全部' || statusValue(key, row).includes(state.filter)));
-    return visible.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>${cols.map((x) => `<th>${columnLabel(key, x)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr>${cols.map((col) => `<td>${value(col,item,key)}</td>`).join('')}<td><div class="actions"><button class="text-btn" data-action="detail" data-key="${key}" data-id="${safe(item.id)}">详情</button>${(window.AdminUI?.NO_EDIT?.has(key) || ['certificates','drones','feedback','accounts','flights','enrollments','audit','alerts','interface'].includes(key)) ? '' : `<button class="text-btn" data-go="form/${key}/${safe(item.id)}">编辑</button>`}${key === 'accounts' ? `<button class="text-btn" data-action="modal" data-modal="permission" data-key="accounts" data-item="${safe(item.id)}">配置权限</button>` : ''}${['laws','news'].includes(key) ? `<button class="text-btn warning" data-action="toggle-content-status" data-id="${safe(item.id)}">${item.status === '已发布' ? '下架' : '发布'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="${key}" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'activities' ? `<button class="text-btn" data-go="detail/activities/${safe(item.id)}">查看报名名单</button><button class="text-btn warning" data-action="request-change" data-key="activities" data-id="${safe(item.id)}">下架活动</button><button class="text-btn danger" data-action="request-delete-content" data-key="activities" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'drones' && droneRegistrationState(item) !== '已注销' ? `<button class="text-btn danger" data-action="cancel-drone" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'certificates' && item.state !== '已注销' ? `<button class="text-btn danger" data-action="request-change" data-key="certificates" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'users' || key === 'companies' || key === 'blacklist' || key === 'volunteers' ? `<button class="text-btn danger" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>` : ''}${key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="text-btn warning" data-action="request-change" data-key="drones" data-id="${safe(item.id)}">禁用设备</button>` : ''}${key === 'verification' ? (item.result === '待核查' ? `<button class="text-btn" data-action="request-change" data-key="verification" data-id="${safe(item.id)}">完成核查</button>` : '') : (['feedback','laws','news','activities','accounts','certificates','drones','users','companies','blacklist','volunteers','flights','enrollments','audit','alerts','interface'].includes(key) || (key === 'messages' && item.state === '已推送') ? '' : `<button class="text-btn" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>`)}</div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的数据</div>';
+    return visible.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>${cols.map((x) => `<th>${columnLabel(key, x)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr>${cols.map((col) => `<td>${value(col,item,key)}</td>`).join('')}<td><div class="actions"><button class="text-btn" data-action="detail" data-key="${key}" data-id="${safe(item.id)}">详情</button>${(window.AdminUI?.NO_EDIT?.has(key) || ['certificates','drones','feedback','accounts','flights','enrollments','audit','alerts','interface','messages'].includes(key)) ? '' : `<button class="text-btn" data-go="form/${key}/${safe(item.id)}">编辑</button>`}${key === 'accounts' ? `<button class="text-btn" data-action="modal" data-modal="permission" data-key="accounts" data-item="${safe(item.id)}">配置权限</button>` : ''}${['laws','news'].includes(key) ? `<button class="text-btn warning" data-action="toggle-content-status" data-id="${safe(item.id)}">${item.status === '已发布' ? '下架' : '发布'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="${key}" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'activities' ? `<button class="text-btn" data-go="detail/activities/${safe(item.id)}">查看报名名单</button><button class="text-btn warning" data-action="request-change" data-key="activities" data-id="${safe(item.id)}">下架活动</button><button class="text-btn danger" data-action="request-delete-content" data-key="activities" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'drones' && droneRegistrationState(item) !== '已注销' ? `<button class="text-btn danger" data-action="cancel-drone" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'certificates' && item.state !== '已注销' ? `<button class="text-btn danger" data-action="request-change" data-key="certificates" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'users' || key === 'companies' || key === 'blacklist' || key === 'volunteers' ? `<button class="text-btn danger" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>` : ''}${key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="text-btn warning" data-action="request-change" data-key="drones" data-id="${safe(item.id)}">禁用设备</button>` : ''}${key === 'verification' ? (item.result === '待核查' ? `<button class="text-btn" data-action="request-change" data-key="verification" data-id="${safe(item.id)}">完成核查</button>` : '') : key === 'messages' ? `<button class="text-btn ${item.state === '已启用' ? 'warning' : ''}" data-action="toggle-message-template" data-id="${safe(item.id)}">${item.state === '已启用' ? '停用' : '启用'}</button>` : (['feedback','laws','news','activities','accounts','certificates','drones','users','companies','blacklist','volunteers','flights','enrollments','audit','alerts','interface'].includes(key) ? '' : `<button class="text-btn" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>`)}</div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的数据</div>';
   };
   const filterBar = (key) => {
-    if (key === 'feedback') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索反馈内容" aria-label="搜索反馈内容" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    const options = key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'messages' ? ['全部','浙里办推送','系统推送'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
+    if (key === 'feedback') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索反馈编号、提交人、表单类型或填写内容" aria-label="搜索反馈提交记录" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const options = key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'messages' ? ['全部','已启用','已停用'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
     if (key === 'faq') return `<div class="filter-bar faq-filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索问题关键词" aria-label="搜索常见问题" /><select id="state-filter" aria-label="发布状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
     if (key === 'verification') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索核查编号、设备名称、设备序列号或登记标志" aria-label="搜索设备核查" /><select id="state-filter" aria-label="核查结果筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    if (key === 'messages') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索模板编号、名称、业务场景或触发条件" aria-label="搜索消息模板" /><select id="state-filter" aria-label="启用状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
     return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索${meta[key][0]}" aria-label="搜索" /><select id="state-filter" aria-label="状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
   };
   const faqRows = () => rowsFor('faq')
@@ -675,7 +715,7 @@
     const body = rows.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>活动名称</th><th>活动状态</th><th>已报名/名额</th><th>待确认</th><th>名单确认状态</th><th>操作</th></tr></thead><tbody>${rows.map((item) => `<tr><td><b>${safe(item.title)}</b><small class="faq-record-id">${safe(item.id)}</small></td><td>${status(item.status)}</td><td>${safe(item.enrolledText)}</td><td>${item.pending}</td><td>${status(item.listState)}</td><td><div class="actions"><button class="text-btn" data-go="detail/activities/${safe(item.id)}">进入名单确认</button><button class="text-btn" data-action="export" data-label="报名名单">导出</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的活动报名</div>';
     return shell(`${heading('报名确认','按活动汇总待确认报名；进入活动详情核对后对本场名单执行总确认。','<button class="primary-btn" data-action="export" data-label="报名名单">导出报名</button>')}<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索活动名称" aria-label="搜索活动" /><select id="state-filter" aria-label="名单确认状态筛选">${['全部','待确认','已确认'].map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>${body}`, 'enrollments');
   };
-  const formModules = ['activities','laws','news','guides','faq','messages','volunteers','blacklist','verification'];
+  const formModules = ['activities','laws','news','guides','faq','volunteers','blacklist','verification'];
   const normal = (key) => {
     if (key === 'guides') return guideAdmin();
     if (key === 'faq') return faqAdmin();
@@ -922,13 +962,9 @@
       return shell(`${heading('操作手册详情','',`<button class="secondary-btn" data-go="guides">返回列表</button><button class="primary-btn" data-go="form/guides/${safe(item.id)}">编辑流程</button><button class="secondary-btn ${published ? 'warning' : ''}" data-action="request-change" data-key="guides" data-id="${safe(item.id)}">${toggleLabel}</button><button class="danger-btn" data-action="request-delete-content" data-key="guides" data-id="${safe(item.id)}">删除</button><button class="secondary-btn" data-go="faq">管理常见问题</button>`)}<section class="detail-grid"><div><span>流程标题</span><b>${safe(item.title)}</b></div><div><span>发布状态</span><b>${status(item.status || '已发布')}</b></div><div><span>编号排序</span><b>${safe(String(Number(item.sort) > 0 ? Number(item.sort) : '—'))}</b></div><div><span>更新时间</span><b>${safe(item.updated || data.uomGuide.updated || '—')}</b></div><div class="is-wide"><span>流程摘要</span><b>${safe(item.summary || '—')}</b></div></section><section class="content-panel"><div class="panel-title"><h2>图文说明</h2></div><div class="manual-admin-preview">${richBlocks}</div></section>`,'guides');
     }
     if (key === 'feedback') {
-      const item = data.feedbacks.find((feedbackItem) => feedbackItem.id === id) || data.feedbacks[0];
-      const configuredValues = Object.entries(item.fields || {}).filter(([field]) => !['category', 'title', 'content'].includes(field));
-      const fieldValues = configuredValues.length ? `<section class="content-panel"><div class="panel-title"><h2>表单补充字段</h2></div>${miniTable(['字段名称', '填写内容'], configuredValues.map(([field, value]) => [safe(field), safe(value || '未填写')]))}</section>` : '';
-      const attachmentValues = Object.entries(item.attachments || {});
-      const attachmentRows = attachmentValues.flatMap(([field, value]) => (Array.isArray(value) ? value : [value]).map((name) => [safe(field), safe(name)]));
-      const attachments = attachmentRows.length ? `<section class="content-panel"><div class="panel-title"><h2>图片附件</h2></div>${miniTable(['附件字段', '文件名称'], attachmentRows)}</section>` : '';
-      return shell(`${heading('意见反馈详情','查看用户提交的反馈内容。',`<button class="secondary-btn" data-go="feedback">返回反馈列表</button>`)}<section class="detail-grid"><div><span>反馈类型</span><b>${safe(item.category)}</b></div><div><span>提交时间</span><b>${safe(item.time)}</b></div></section><section class="content-panel"><h2>${safe(item.title)}</h2><p>${safe(item.content)}</p></section>${fieldValues}${attachments}`,'feedback');
+      const item = data.feedbacks.find((feedbackItem) => feedbackItem.id === id);
+      if (!item) return shell(`${heading('意见反馈详情','',`<button class="secondary-btn" data-go="feedback">返回列表</button>`)}<div class="empty">未找到反馈记录 ${safe(id || '')}</div>`,'feedback');
+      return shell(`${heading('意见反馈详情','',`<button class="secondary-btn" data-go="feedback">返回列表</button>`)}${feedbackContentBody(item)}`,'feedback');
     }
     if (key === 'alerts') {
       const item = data.alerts.find((alert) => alert.id === id) || data.alerts[0];
@@ -1001,17 +1037,30 @@
       return shell(`${heading('志愿者详情','',`<button class="secondary-btn" data-go="volunteers">返回列表</button><button class="primary-btn" data-go="form/volunteers/${safe(id)}">编辑信息</button>${removeBtn}`)}${sectionPanel('基本信息', detailGrid([['姓名', item.name], ['手机号码', item.phone], ['关联用户', item.userId || '—'], ['志愿者类型', item.volunteerType || '—'], ['所属区域', item.area || '—'], ['线下确认日期', item.confirmedAt || '—'], ['在册状态', status(item.state || '在册'), true]]))}`,'volunteers');
     }
     if (key === 'messages') {
-      const src = data.messages.find((entry) => entry.id === id) || item;
+      const src = (data.messageTemplates || []).find((entry) => entry.id === id) || item;
       const channel = src.channel === '系统消息' ? '系统推送' : (src.channel || '系统推送');
-      const pushState = src.state === '未推送' || src.state === '已推送' ? src.state : '已推送';
-      const pushBtn = pushState === '未推送' ? `<button class="primary-btn" data-action="request-change" data-key="messages" data-id="${safe(id)}">推送消息</button>` : '';
-      return shell(`${heading('消息详情','',`<button class="secondary-btn" data-go="messages">返回列表</button>`)}${detailGrid([['消息标题', src.title || '—'], ['消息内容', src.content || '—'], ['推送时间', src.time || '—'], ['消息类型', channel], ['状态', status(pushState), true], ['推送人', src.pusher || '—']])}<section class="actions" style="margin-top:16px"><button class="primary-btn" data-go="form/messages/${safe(id)}">编辑记录</button>${pushBtn}</section>`,'messages');
+      const enableState = src.state === '已停用' ? '已停用' : '已启用';
+      const toggleLabel = enableState === '已启用' ? '停用模板' : '启用模板';
+      const toggleTone = enableState === '已启用' ? 'warning' : 'primary';
+      const toggleBtn = `<button class="${toggleTone}-btn" data-action="toggle-message-template" data-id="${safe(id)}">${toggleLabel}</button>`;
+      return shell(`${heading('消息模板详情','',`<button class="secondary-btn" data-go="messages">返回列表</button>${toggleBtn}`)}${detailGrid([
+        ['模板编号', src.id || '—'],
+        ['模板名称', src.name || '—'],
+        ['业务场景', src.scene || '—'],
+        ['触达渠道', channel],
+        ['启用状态', status(enableState), true],
+        ['更新时间', src.updated || '—'],
+        ['触发条件', src.trigger || '—'],
+        ['变量说明', src.variables || '—'],
+        ['消息标题', src.title || '—'],
+        ['消息内容', src.content || '—']
+      ])}`,'messages');
     }
     if (key === 'verification') {
       const completeBtn = item.result === '待核查'
         ? `<button class="secondary-btn" data-action="request-change" data-key="verification" data-id="${safe(id)}">完成核查</button>`
         : '';
-      return shell(`${heading('设备核查详情','',`<button class="secondary-btn" data-go="verification">返回列表</button>`)}${detailGrid([
+      return shell(`${heading('设备核查详情','',`<button class="secondary-btn" data-go="verification">返回列表</button><button class="primary-btn" data-go="form/verification/${safe(id)}">编辑记录</button>${completeBtn}`)}${detailGrid([
         ['核查编号', item.id],
         ['设备名称', item.aircraftName || item.name || '—'],
         ['设备序列号', item.serialNumber || '—'],
@@ -1027,24 +1076,90 @@
         ['核查人', item.operator || '—'],
         ['核查日期', item.checkDate || item.time || '—'],
         ['办理状态', status(item.state || '—'), true]
-      ])}<section class="actions" style="margin-top:16px"><button class="primary-btn" data-go="form/verification/${safe(id)}">编辑记录</button>${completeBtn}</section>`,'verification');
+      ])}`,'verification');
     }
     const uomFields = key === 'certificates' ? data.uomCertificateFields : key === 'drones' ? data.uomDroneFields : null;
     const registrationState = key === 'drones' ? droneRegistrationState(item) : null;
     const adminDisable = key === 'drones' && (state.disabledDrones.has(item.id) || item.status === '已禁用');
     const details = uomFields ? uomFields.map(([field, name]) => [name, key === 'certificates' && field === 'registrationStatus' ? certificateStatus(item.state || data.uomValue(item, field)) : key === 'drones' && field === 'registrationStatus' ? registrationState : data.uomValue(item, field), (key === 'certificates' || key === 'drones') && field === 'registrationStatus']).concat(key === 'certificates' ? [['归集更新时间', item.updated || '—']] : [['归属', item.owner || '—'], ['设备分组', item.group || '—'], ['管理状态', status(adminDisable ? '已禁用' : '正常'), true]]) : Object.entries(item).filter(([, content]) => typeof content !== 'object' || content === null).map(([field, content]) => [label(field), ['status','state','executed'].includes(field) ? status(statusValue(key, item)) : safe(content), true]);
-    const description = key === 'certificates' ? '查看用户端登记证申请归集后的证载信息与登记状态。' : key === 'drones' ? '查看与 UOM 登记证一致的无人机基础参数和台账分组。' : '查看脱敏字段、关联记录与操作。';
     const canFormEdit = formModules.includes(key);
     const noEdit = ['certificates', 'drones', 'flights', 'enrollments', 'feedback', 'audit', 'alerts', 'interface'].includes(key);
-    return shell(`${heading(`${meta[key]?.[0] || '模块'}详情`,description,`<button class="secondary-btn" data-go="${key}">返回列表</button>`)}${detailGrid(details)}${key === 'certificates' ? certificateAttachment(item) : ''}<section class="actions" style="margin-top:16px">${canFormEdit ? `<button class="primary-btn" data-go="form/${key}/${safe(id)}">编辑记录</button>` : ''}${key === 'drones' && registrationState !== '已注销' ? `<button class="danger-btn" data-action="cancel-drone" data-id="${safe(id)}">手动注销</button>` : ''}${key === 'certificates' && item.state === '已注销' ? '' : (noEdit && key !== 'certificates' && key !== 'drones' ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : (key === 'certificates' && item.state !== '已注销' ? `<button class="danger-btn" data-action="request-change" data-key="certificates" data-id="${safe(id)}">手动注销</button>` : (key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="secondary-btn" data-action="request-change" data-key="drones" data-id="${safe(id)}">禁用设备</button>` : (!noEdit && !canFormEdit ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : ''))))}${historyButton}</section>${related}`);
+    const detailOps = `${canFormEdit ? `<button class="primary-btn" data-go="form/${key}/${safe(id)}">编辑记录</button>` : ''}${key === 'drones' && registrationState !== '已注销' ? `<button class="danger-btn" data-action="cancel-drone" data-id="${safe(id)}">手动注销</button>` : ''}${key === 'certificates' && item.state === '已注销' ? '' : (noEdit && key !== 'certificates' && key !== 'drones' ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : (key === 'certificates' && item.state !== '已注销' ? `<button class="danger-btn" data-action="request-change" data-key="certificates" data-id="${safe(id)}">手动注销</button>` : (key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="secondary-btn" data-action="request-change" data-key="drones" data-id="${safe(id)}">禁用设备</button>` : (!noEdit && !canFormEdit ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : ''))))}${historyButton}`;
+    return shell(`${heading(`${meta[key]?.[0] || '模块'}详情`,'',`<button class="secondary-btn" data-go="${key}">返回列表</button>${detailOps}`)}${detailGrid(details)}${key === 'certificates' ? certificateAttachment(item) : ''}${related}`);
+  };
+  const feedbackFieldKey = (name) => {
+    if (/类型/.test(name)) return 'category';
+    if (/标题/.test(name)) return 'title';
+    if (/说明|描述|内容/.test(name)) return 'content';
+    if (/电话|手机/.test(name)) return 'phone';
+    return name;
+  };
+  const feedbackFormName = (item) => {
+    const formMeta = (data.feedbackForms || []).find((form) => form.id === item.formId);
+    return formMeta?.name || item.category || '—';
+  };
+  const feedbackFilledRows = (item) => {
+    const formMeta = (data.feedbackForms || []).find((form) => form.id === item.formId);
+    const fields = formMeta?.fields || [];
+    const values = item.fields || {};
+    const rows = [];
+    if (fields.length) {
+      fields.forEach((row) => {
+        const name = Array.isArray(row) ? row[0] : '';
+        const type = Array.isArray(row) ? row[1] : '';
+        if (!name) return;
+        if (type === '图片' || type === '多张图片') {
+          const files = item.attachments?.[feedbackFieldKey(name)] || item.attachments?.[name] || [];
+          const list = Array.isArray(files) ? files : (files ? [files] : []);
+          rows.push([name, list.length ? list.join('、') : '未上传']);
+          return;
+        }
+        const key = feedbackFieldKey(name);
+        const raw = values[key] ?? values[name] ?? '';
+        rows.push([name, Array.isArray(raw) ? raw.join('、') : (raw || '未填写')]);
+      });
+    } else {
+      Object.entries(values).forEach(([field, value]) => {
+        if (['category'].includes(field)) return;
+        rows.push([field === 'title' ? '反馈标题' : field === 'content' ? '详细说明' : field === 'phone' ? '联系电话' : field, Array.isArray(value) ? value.join('、') : (value || '未填写')]);
+      });
+    }
+    return rows;
+  };
+  const feedbackSubmitterType = (item) => (item.submitterType === '企业用户' ? '企业用户' : '个人用户');
+  const feedbackContentBody = (item) => {
+    const formType = feedbackFormName(item);
+    const submitterType = feedbackSubmitterType(item);
+    const submitterName = item.submitterName || '—';
+    const metaRows = `<section class="detail-grid" style="margin:12px 0"><div><span>反馈编号</span><b>${safe(item.id)}</b></div><div><span>提交人</span><b>${safe(submitterName)}</b></div><div><span>用户身份</span><b>${safe(submitterType)}</b></div><div><span>表单类型</span><b>${safe(formType)}</b></div><div><span>提交时间</span><b>${safe(item.time || '—')}</b></div></section>`;
+    const filled = feedbackFilledRows(item);
+    const formRows = filled.length
+      ? miniTable(['表单字段', '用户填写'], filled.map(([field, value]) => [safe(field), safe(value)]))
+      : '<div class="empty">暂无用户填写内容</div>';
+    return `${metaRows}<section class="content-panel" style="margin:0;box-shadow:none;border:1px solid var(--line)"><div class="panel-title"><h2>用户填写内容</h2></div>${formRows}</section>`;
+  };
+  const feedbackContentTable = () => {
+    const q = state.query.trim().toLowerCase();
+    const rows = (data.feedbacks || []).filter((item) => {
+      if (!q) return true;
+      const formType = feedbackFormName(item);
+      const hay = `${item.id} ${item.submitterName || ''} ${item.submitterType || ''} ${item.time || ''} ${formType} ${item.title || ''} ${item.content || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+    if (!rows.length) return '<div class="empty">暂无符合条件的反馈</div>';
+    return `<div class="table-wrap"><table class="data-table"><thead><tr><th>反馈编号</th><th>提交人</th><th>用户身份</th><th>表单类型</th><th>提交时间</th><th>操作</th></tr></thead><tbody>${rows.map((item) => {
+      const formType = feedbackFormName(item);
+      const submitterType = feedbackSubmitterType(item);
+      return `<tr><td>${safe(item.id)}</td><td>${safe(item.submitterName || '—')}</td><td>${safe(submitterType)}</td><td>${safe(formType)}</td><td>${safe(item.time || '—')}</td><td><div class="actions"><button class="text-btn" data-action="view-feedback-form" data-id="${safe(item.id)}">查看详情</button></div></td></tr>`;
+    }).join('')}</tbody></table></div>`;
   };
   const feedbackPage = () => {
     const tabs = `<div class="page-tabs">${[['content', '反馈内容'], ['forms', '反馈表单管理']].map(([tab, text]) => `<button class="${state.feedbackTab === tab ? 'active' : ''}" data-action="feedback-tab" data-value="${tab}">${text}</button>`).join('')}</div>`;
-    const formsTable = data.feedbackForms.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>表单名称</th><th>适用场景</th><th>字段数</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${data.feedbackForms.map((form) => `<tr><td>${safe(form.name)}</td><td>${safe(form.scene)}</td><td>${form.fields.length} 项</td><td>${status(form.state)}</td><td>${safe(form.updated)}</td><td><div class="actions"><button class="text-btn" data-go="form/feedback-forms/${safe(form.id)}">编辑</button><button class="text-btn warning" data-action="toggle-feedback-form" data-id="${safe(form.id)}">${form.state === '已发布' ? '下架' : '重新发布'}</button><button class="text-btn danger" data-action="request-delete-form" data-id="${safe(form.id)}">删除</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无反馈表单</div>';
+    const formsTable = data.feedbackForms.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>反馈类型</th><th>类型说明</th><th>字段数</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${data.feedbackForms.map((form) => `<tr><td>${safe(form.name)}</td><td>${safe(form.scene)}</td><td>${form.fields.length} 项</td><td>${status(form.state)}</td><td>${safe(form.updated)}</td><td><div class="actions"><button class="text-btn" data-go="form/feedback-forms/${safe(form.id)}">编辑</button><button class="text-btn warning" data-action="toggle-feedback-form" data-id="${safe(form.id)}">${form.state === '已发布' ? '下架' : '重新发布'}</button><button class="text-btn danger" data-action="request-delete-form" data-id="${safe(form.id)}">删除</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无反馈类型表单</div>';
     const headerActions = state.feedbackTab === 'forms'
-      ? `<button class="primary-btn" data-go="form/feedback-forms/new">新建表单</button>`
+      ? `<button class="primary-btn" data-go="form/feedback-forms/new">新建反馈类型</button>`
       : `<button class="primary-btn" data-action="export" data-label="反馈内容">导出反馈</button>`;
-    return shell(`${heading('意见反馈', meta.feedback[1], headerActions)}${tabs}${state.feedbackTab === 'forms' ? formsTable : `${filterBar('feedback')}${table('feedback')}`}`,'feedback');
+    return shell(`${heading('意见反馈','',headerActions)}${tabs}${state.feedbackTab === 'forms' ? formsTable : `${filterBar('feedback')}${feedbackContentTable()}`}`,'feedback');
   };
   const volunteersPage = () => {
     const streets = data.yinzhouStreets || [];
@@ -1218,6 +1333,10 @@
       const item = data.enrollments.find((row) => row.id === state.modal.item) || data.enrollments[0];
       const activityId = item?.activityId || state.modal.activityId || '';
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal modal-wide"><h2 id="modal-title" tabindex="-1">填写内容 · ${safe(item?.applicant || '')}</h2>${enrollmentFormBody(item)}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">关闭</button></div></section></div>`;
+    }
+    if (type === 'feedback-form-view') {
+      const item = data.feedbacks.find((row) => row.id === state.modal.item) || data.feedbacks[0];
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal modal-wide"><h2 id="modal-title" tabindex="-1">用户填写内容 · ${safe(feedbackFormName(item) || item?.title || item?.id || '')}</h2>${feedbackContentBody(item)}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">关闭</button></div></section></div>`;
     }
     if (type === 'enrollment-batch-confirm') {
       const item = data.activities.find((activity) => activity.id === state.modal.item);
@@ -1426,9 +1545,11 @@ if (type === 'activity-confirm') {
       }
       if (key === 'feedback-forms' && ['create', 'edit'].includes(type)) {
         const src = type === 'edit' ? data.feedbackForms.find((form) => form.id === item) : null;
-        state.draft = src ? { name: src.name, scene: src.scene, fields: src.fields.map((row) => [...row]) } : { name: '', scene: '', fields: [['反馈标题', '文本', '必填'], ['详细说明', '多行文本', '必填'], ['图片附件', '多张图片', '选填']] };
+        const normalize = (row) => (window.AdminUI?.normalizeFeedbackField ? AdminUI.normalizeFeedbackField(row) : [...(Array.isArray(row) ? row : [])]);
+        state.draft = src
+          ? { name: src.name, scene: src.scene, fields: (src.fields || []).map(normalize) }
+          : { name: '', scene: '', fields: [['反馈标题', '文本', '必填', ''], ['详细说明', '多行文本', '必填', ''], ['图片附件', '多张图片', '选填', '']] };
       }
-      if (key === 'messages' && type === 'create') state.draft = { title: '', content: '', channel: '系统推送', time: `${data.now} 15:00`, state: '未推送', pusher: '综合管理员' };
       if (key === 'guides' && ['create', 'edit'].includes(type)) {
         const guides = data.uomGuide.guides || [];
         const guide = type === 'edit' ? (guides.find((entry) => entry.id === item) || guides[0]) : null;
@@ -1485,7 +1606,10 @@ if (type === 'activity-confirm') {
     if (action === 'add-config-field') {
       if (state.formKey === 'activities' && activityHasEnrollments(state.formId)) { notify('已有用户提交过报名，字段配置不可编辑'); return; }
       syncDraftFromDom();
-      (state.draft.fields = state.draft.fields || []).push(window.AdminUI?.normalizeEnrollField ? AdminUI.normalizeEnrollField(['', '文本', '选填', '', '']) : ['', '文本', '选填', '', '']);
+      const next = state.formKey === 'feedback-forms'
+        ? (window.AdminUI?.normalizeFeedbackField ? AdminUI.normalizeFeedbackField(['', '文本', '选填', '']) : ['', '文本', '选填', ''])
+        : (window.AdminUI?.normalizeEnrollField ? AdminUI.normalizeEnrollField(['', '文本', '选填', '', '']) : ['', '文本', '选填', '', '']);
+      (state.draft.fields = state.draft.fields || []).push(next);
       render();
     }
     if (action === 'remove-config-field') {
@@ -1530,6 +1654,12 @@ if (type === 'activity-confirm') {
       return;
     }
     if (action === 'feedback-tab') { state.feedbackTab = el.dataset.value; state.query = ''; state.filter = '全部'; render(); }
+    if (action === 'view-feedback-form') {
+      state.feedbackTab = 'content';
+      state.modal = { type: 'feedback-form-view', key: 'feedback', item: el.dataset.id };
+      render();
+      return;
+    }
     if (action === 'light-tab') { state.lightTab = el.dataset.value; state.query = ''; state.filter = '全部'; render(); }
     if (action === 'form-preview') {
       syncDraftFromDom();
@@ -1563,14 +1693,16 @@ if (type === 'activity-confirm') {
         state.formKey = ''; go('activities'); return;
       }
       if (key === 'feedback-forms') {
-        const fields = (d.fields || []).filter((row) => row[0] && String(row[0]).trim());
+        const fields = (d.fields || [])
+          .map((row) => (window.AdminUI?.normalizeFeedbackField ? AdminUI.normalizeFeedbackField(row) : row))
+          .filter((row) => row[0] && String(row[0]).trim());
         if (isNew) data.feedbackForms.unshift({ id: `FORM-${String(data.feedbackForms.length + 1).padStart(2, '0')}`, name: d.name, scene: d.scene, fields, state: '已发布', updated: data.now });
         else {
           const item = data.feedbackForms.find((f) => f.id === id);
           if (item) Object.assign(item, { name: d.name, scene: d.scene, fields, updated: data.now });
         }
         persistPublicService();
-        notify(isNew ? '反馈表单已创建并发布' : '反馈表单已更新');
+        notify(isNew ? '反馈类型已创建并发布' : '反馈类型已更新');
         state.feedbackTab = 'forms'; state.formKey = ''; go('feedback'); return;
       }
       if (key === 'guides') {
@@ -1619,17 +1751,6 @@ if (type === 'activity-confirm') {
           notify('内容已更新');
         }
         persistPublicService(); state.formKey = ''; go(key); return;
-      }
-      if (key === 'messages') {
-        const channel = d.channel === '浙里办推送' ? '浙里办推送' : '系统推送';
-        const pushState = d.state === '已推送' ? '已推送' : '未推送';
-        const payload = { title: d.title, content: d.content || '', channel, time: d.time, state: pushState, pusher: d.pusher || '综合管理员' };
-        if (isNew) data.messages.unshift({ id: `MSG-${String(data.messages.length + 1).padStart(2, '0')}`, ...payload, read: false });
-        else {
-          const item = data.messages.find((m) => m.id === id);
-          if (item) Object.assign(item, payload);
-        }
-        persistPublicService(); notify(pushState === '已推送' ? '用户消息已保存并同步至用户端' : '消息已保存'); state.formKey = ''; go('messages'); return;
       }
       if (key === 'users') {
         const draftUser = state.userProfileDraft;
@@ -1866,16 +1987,6 @@ if (type === 'activity-confirm') {
       state.modal = null;
       notify('常见问题已保存并同步至用户端');
     }
-    if (action === 'submit-message') {
-      const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
-      const d = state.draft;
-      const channel = d.channel === '浙里办推送' ? '浙里办推送' : '系统推送';
-      const pushState = d.state === '已推送' ? '已推送' : '未推送';
-      data.messages.unshift({ id: `MSG-${String(data.messages.length + 1).padStart(2, '0')}`, title: d.title, content: d.content || '', channel, time: d.time, state: pushState, pusher: d.pusher || '综合管理员', read: false });
-      persistPublicService();
-      state.modal = null;
-      notify(pushState === '已推送' ? '用户消息已发布并同步至用户端' : '消息已保存');
-    }
     if (action === 'submit-content') {
       const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
       const d = state.draft;
@@ -1919,6 +2030,15 @@ if (type === 'activity-confirm') {
       }
       persistPublicService();
       state.modal = null;
+    }
+    if (action === 'toggle-message-template') {
+      const item = (data.messageTemplates || []).find((entry) => entry.id === el.dataset.id);
+      if (item) {
+        item.state = item.state === '已启用' ? '已停用' : '已启用';
+        item.updated = data.now;
+        persistPublicService();
+        notify(item.state === '已启用' ? '消息模板已启用' : '消息模板已停用');
+      }
     }
     if (action === 'toggle-feedback-form') {
       const item = data.feedbackForms.find((form) => form.id === el.dataset.id);
@@ -2203,14 +2323,6 @@ if (type === 'activity-confirm') {
           }
           state.modal = null;
           notify('RID 模块已回收，状态更新为“在库”');
-          return;
-        }
-        if (key === 'messages') {
-          const message = data.messages.find((entry) => entry.id === item);
-          if (message) Object.assign(message, { state: '已推送' });
-          persistPublicService();
-          state.modal = null;
-          notify('消息已推送并同步至用户端');
           return;
         }
         state.overrides.set(`${key}:${item}`, operationResult(key));
@@ -2514,7 +2626,12 @@ if (type === 'activity-confirm') {
         return;
       }
       state.draft.fields[row][cell] = event.target.value;
-      if (cell === 1) render();
+      if (cell === 1) {
+        if (state.formKey === 'feedback-forms' && !['单选', '多选'].includes(event.target.value)) {
+          state.draft.fields[row][3] = '';
+        }
+        render();
+      }
       return;
     }
     if (event.target.id === 'content-cover-file') {

@@ -31,7 +31,10 @@
     }
     if (key === 'feedback-forms') {
       const src = isNew ? null : data.feedbackForms.find((f) => f.id === id);
-      return src ? { name: src.name, scene: src.scene, fields: src.fields.map((row) => [...row]) } : { name: '', scene: '', fields: [['反馈标题', '文本', '必填'], ['详细说明', '多行文本', '必填'], ['图片附件', '多张图片', '选填']] };
+      const normalize = (row) => (window.AdminUI?.normalizeFeedbackField ? AdminUI.normalizeFeedbackField(row) : [...(Array.isArray(row) ? row : []), '', '', '', ''].slice(0, 4));
+      return src
+        ? { name: src.name, scene: src.scene, fields: (src.fields || []).map(normalize) }
+        : { name: '', scene: '', fields: [['反馈标题', '文本', '必填', ''], ['详细说明', '多行文本', '必填', ''], ['图片附件', '多张图片', '选填', '']] };
     }
     if (key === 'guides') {
       const guides = data.uomGuide.guides || [];
@@ -62,13 +65,6 @@
       return src
         ? { title: src.title || '', source: src.source || '鄞州区低空安全服务中心', coverKind, coverImage: src.coverImage || '', coverName: src.coverName || '', status: src.status || '已发布', sort, summary: src.summary || '', effectiveStart, effectiveEnd, body: (src.content || []).join('\n') }
         : { title: '', source: '鄞州区低空安全服务中心', coverKind: 'image', coverImage: '', coverName: '', status: '已发布', sort: nextSort, summary: '', effectiveStart: data.now, effectiveEnd: '', body: '' };
-    }
-    if (key === 'messages') {
-      const src = isNew ? null : data.messages.find((m) => m.id === id);
-      const channel = src?.channel === '系统消息' ? '系统推送' : (src?.channel || '系统推送');
-      return src
-        ? { title: src.title || '', content: src.content || '', channel, time: src.time || `${data.now} 15:00`, state: src.state === '已推送' ? '已推送' : '未推送', pusher: src.pusher || '综合管理员' }
-        : { title: '', content: '', channel: '系统推送', time: `${data.now} 15:00`, state: '未推送', pusher: '综合管理员' };
     }
     if (key === 'users') {
       const user = isNew ? null : data.users.find((u) => u.id === id);
@@ -148,7 +144,7 @@
       return `<form class="form-stack" id="admin-form"><label>活动名称${input('title', { required: true })}</label><div class="form-grid-2"><label>活动开始时间${input('startTime', { required: true, placeholder: '2026-08-20 09:00' })}</label><label>活动结束时间${input('endTime', { required: true, placeholder: '2026-08-20 11:30' })}</label><label>报名开始时间${input('enrollStart', { required: true })}</label><label>报名截止时间${input('enrollEnd', { required: true })}</label></div><label>活动地点${input('place', { required: true })}</label><label>活动名额${input('capacity', { required: true, type: 'number', min: '1' })}</label><label>主办单位${input('organizer', { required: true })}</label><label>咨询方式${input('contact', { required: true, placeholder: '如 服务咨询 0574-****-8612' })}</label><label>活动简介${textarea('summary', { required: true })}</label><label><span>活动介绍（富文本）</span>${rich.mountMarkup('richText', rich.textToHtml(draft.richText), '请输入活动介绍')}</label><fieldset class="config-fieldset enroll-config-fieldset"><legend>报名表单字段配置</legend>${fieldTable}</fieldset></form>`;
     }
     if (key === 'feedback-forms') {
-      return `<form class="form-stack" id="admin-form"><label>表单名称${input('name', { required: true })}</label><label>适用场景${input('scene', { required: true, placeholder: '如 通用反馈 / 隐患上报' })}</label><fieldset class="config-fieldset"><legend>表单字段配置</legend>${ui.configRows(draft.fields || [])}</fieldset></form>`;
+      return `<form class="form-stack" id="admin-form"><label>反馈类型名称${input('name', { required: true, placeholder: '如 功能建议 / 问题咨询 / 隐患上报' })}</label><label>类型说明${input('scene', { required: true, placeholder: '用户端类型旁展示的简要说明' })}</label><fieldset class="config-fieldset"><legend>表单字段配置</legend>${ui.configRows(draft.fields || [])}</fieldset></form>`;
     }
     if (key === 'guides') {
       return `<form class="form-stack" id="admin-form"><label>流程标题${input('title', { required: true })}</label><label>流程摘要${input('summary', { required: true })}</label><div class="form-grid-2"><label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>编号排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>图文说明（富文本）</span>${rich.mountMarkup('body', rich.textToHtml(draft.body), '输入流程说明')}</label></form>`;
@@ -172,9 +168,6 @@
         actionText: '选择文件'
       });
       return `<form class="form-stack" id="admin-form"><label>内容标题${input('title', { required: true })}</label><label>发布单位${input('source', { required: true })}</label><div class="form-grid-2">${key === 'laws' ? `<label>生效开始日期${input('effectiveStart', { required: true, type: 'date' })}</label><label>生效结束日期${input('effectiveEnd', { required: true, type: 'date' })}</label>` : ''}<label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>封面</span>${coverUpload}${draft.coverName ? `<small class="record-note">已选：${safe(draft.coverName)}</small>` : ''}</label><label>摘要${textarea('summary', { required: true })}</label><label><span>正文（富文本）</span>${rich.mountMarkup('body', rich.textToHtml(draft.body), '请输入正文')}</label></form>`;
-    }
-    if (key === 'messages') {
-      return `<form class="form-stack" id="admin-form"><label>消息标题${input('title', { required: true, placeholder: '请输入推送标题' })}</label><label>消息内容${textarea('content', { required: true, placeholder: '请输入推送内容' })}</label><label>推送时间${input('time', { required: true })}</label><label>消息类型${select('channel', ['浙里办推送', '系统推送'])}</label><label>状态${select('state', ['未推送', '已推送'])}</label><label>推送人${input('pusher', { required: true, placeholder: '如 综合管理员' })}</label></form>`;
     }
     if (key === 'users') {
       const streets = (typeof global !== 'undefined' && global.LowAltitudeMock?.yinzhouStreets) || [];
@@ -271,12 +264,11 @@
 
   const titles = {
     activities: ['新建活动', '编辑活动', '创建后进入“报名中”；指定授权账号在报名名单中确认。'],
-    'feedback-forms': ['新建反馈表单', '编辑反馈表单', '表单发布后用户端按字段配置采集。'],
+    'feedback-forms': ['新建反馈类型', '编辑反馈类型', '发布后用户端先选类型，再按本表单字段填写。'],
     guides: ['新建流程指导', '编辑流程指导', '保存后同步用户端操作手册。'],
     faq: ['新建常见问题', '编辑常见问题', '仅已发布内容在用户端可见。'],
     laws: ['新建政策法规', '编辑政策法规', '需填写发布单位与生效起止日期。'],
     news: ['新建新闻公告', '编辑新闻公告', '封面可上传图片或视频。'],
-    messages: ['新建用户消息', '编辑用户消息', ''],
     users: ['新增用户', '编辑个人信息', '保存后同步至用户端个人档案。'],
     companies: ['新增企业', '编辑企业信息', '保存后同步至用户端企业档案。'],
     volunteers: ['添加志愿者', '编辑志愿者', ''],

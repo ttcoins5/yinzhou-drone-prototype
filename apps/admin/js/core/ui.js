@@ -6,8 +6,8 @@
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 
-  const NO_EDIT = new Set(['certificates', 'drones', 'feedback', 'accounts', 'sys-users', 'roles', 'menus', 'dicts', 'config', 'login-logs', 'flights', 'enrollments', 'audit', 'alerts', 'interface', 'users', 'companies']);
-  const FORM_MODULES = new Set(['activities', 'laws', 'news', 'guides', 'faq', 'messages', 'feedback-forms', 'users', 'companies', 'volunteers', 'blacklist', 'verification']);
+  const NO_EDIT = new Set(['certificates', 'drones', 'feedback', 'accounts', 'sys-users', 'roles', 'menus', 'dicts', 'config', 'login-logs', 'flights', 'enrollments', 'audit', 'alerts', 'interface', 'users', 'companies', 'messages']);
+  const FORM_MODULES = new Set(['activities', 'laws', 'news', 'guides', 'faq', 'feedback-forms', 'users', 'companies', 'volunteers', 'blacklist', 'verification']);
 
   const statusKind = (value) => {
     const text = String(value || '');
@@ -20,6 +20,8 @@
     if (text === '通过') return 'success';
     if (text === '不通过') return 'danger';
     if (text === '待核查') return 'warning';
+    if (text === '已启用') return 'success';
+    if (text === '已停用') return 'muted';
     if (/(已注销|已禁用|已停用|已取消|已移除)/u.test(text)) return 'muted';
     if (/(异常|失败|黑名单|已拉黑)/u.test(text)) return 'danger';
     if (/(待|维修|未接入|未确认|未执行|未配发|未推送)/u.test(text)) return 'warning';
@@ -41,7 +43,20 @@
     return `<button type="button" class="${className}" data-action="${escape(action || '')}" ${data}>${escape(label)}</button>`;
   };
 
-  const configRows = (fields) => `<div class="config-rows">${(fields || []).map((row, index) => `<div class="config-row"><input data-config-row="${index}" data-config-cell="0" value="${escape(row[0])}" placeholder="字段名称" /><select data-config-row="${index}" data-config-cell="1">${['文本', '单选', '多选', '电话', '多行文本', '多张图片'].map((t) => `<option${row[1] === t ? ' selected' : ''}>${t}</option>`).join('')}</select><select data-config-row="${index}" data-config-cell="2">${['必填', '选填'].map((t) => `<option${row[2] === t ? ' selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="text-btn danger" data-action="remove-config-field" data-index="${index}">移除</button></div>`).join('')}</div><button type="button" class="secondary-btn" data-action="add-config-field">+ 添加表单字段</button>`;
+  const normalizeFeedbackField = (row = []) => {
+    const [name = '', type = '文本', required = '选填', options = ''] = Array.isArray(row) ? row : [];
+    const normalizedType = type === '图片' ? '多张图片' : (type || '文本');
+    const needsOptions = normalizedType === '单选' || normalizedType === '多选';
+    return [String(name || ''), normalizedType, required === '必填' || required === true ? '必填' : '选填', needsOptions ? String(options || '') : ''];
+  };
+
+  const configRows = (fields) => {
+    const rows = (fields || []).map(normalizeFeedbackField);
+    return `<div class="config-rows">${rows.map((row, index) => {
+      const needsOptions = row[1] === '单选' || row[1] === '多选';
+      return `<div class="config-row"><input data-config-row="${index}" data-config-cell="0" value="${escape(row[0])}" placeholder="字段名称" /><select data-config-row="${index}" data-config-cell="1">${['文本', '单选', '多选', '电话', '多行文本', '多张图片'].map((t) => `<option${row[1] === t ? ' selected' : ''}>${t}</option>`).join('')}</select><select data-config-row="${index}" data-config-cell="2">${['必填', '选填'].map((t) => `<option${row[2] === t ? ' selected' : ''}>${t}</option>`).join('')}</select><input data-config-row="${index}" data-config-cell="3" value="${escape(row[3])}" placeholder="${needsOptions ? '选项用顿号或逗号分隔' : '仅单选/多选填写'}"${needsOptions ? '' : ' disabled'} /><button type="button" class="text-btn danger" data-action="remove-config-field" data-index="${index}">移除</button></div>`;
+    }).join('')}</div><button type="button" class="secondary-btn" data-action="add-config-field">+ 添加表单字段</button>`;
+  };
 
   /** 活动报名表单字段：表格形态；无绑定子表单；支持单独保存与报名后锁定 */
   const enrollUiTypes = ['文本', '下拉框', '手机号'];
@@ -127,6 +142,7 @@
     status,
     actionBtn,
     configRows,
+    normalizeFeedbackField,
     normalizeEnrollField,
     toEnrollStorageType,
     toEnrollUiType,
