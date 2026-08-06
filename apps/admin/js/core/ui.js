@@ -17,6 +17,9 @@
     if (text === '已下架') return 'danger';
     if (text === '在库') return 'info';
     if (text === '已配发' || text === '已领用') return 'success';
+    if (text === '通过') return 'success';
+    if (text === '不通过') return 'danger';
+    if (text === '待核查') return 'warning';
     if (/(已注销|已禁用|已停用|已取消|已移除)/u.test(text)) return 'muted';
     if (/(异常|失败|黑名单|已拉黑)/u.test(text)) return 'danger';
     if (/(待|维修|未接入|未确认|未执行|未配发|未推送)/u.test(text)) return 'warning';

@@ -35,9 +35,6 @@
       { id: '72', parentId: '7', name: '常见问题', type: '菜单', order: 2, perms: 'drone:faq:list', component: 'drone/faq/index', status: '正常' },
       { id: '8', parentId: '0', name: '志愿者管理', type: '目录', order: 8, perms: '', component: '', status: '正常' },
       { id: '81', parentId: '8', name: '志愿者名册', type: '菜单', order: 1, perms: 'drone:volunteer:list', component: 'drone/volunteer/index', status: '正常' },
-      { id: '82', parentId: '8', name: 'RID模块', type: '菜单', order: 2, perms: 'drone:rid:list', component: 'drone/rid/index', status: '正常' },
-      { id: '9', parentId: '0', name: '肩灯配发管理', type: '目录', order: 9, perms: '', component: '', status: '正常' },
-      { id: '91', parentId: '9', name: '肩灯配发', type: '菜单', order: 1, perms: 'drone:light:list', component: 'drone/light/index', status: '正常' },
       { id: '10', parentId: '0', name: '消息管理', type: '目录', order: 10, perms: '', component: '', status: '正常' },
       { id: '101', parentId: '10', name: '消息推送', type: '菜单', order: 1, perms: 'drone:message:list', component: 'drone/message/index', status: '正常' },
       { id: '11', parentId: '0', name: '意见反馈管理', type: '目录', order: 11, perms: '', component: '', status: '正常' },
@@ -46,10 +43,7 @@
       { id: '121', parentId: '12', name: '用户管理', type: '菜单', order: 1, perms: 'system:user:list', component: 'system/user/index', status: '正常' },
       { id: '122', parentId: '12', name: '角色管理', type: '菜单', order: 2, perms: 'system:role:list', component: 'system/role/index', status: '正常' },
       { id: '123', parentId: '12', name: '菜单管理', type: '菜单', order: 3, perms: 'system:menu:list', component: 'system/menu/index', status: '正常' },
-      { id: '124', parentId: '12', name: '字典管理', type: '菜单', order: 4, perms: 'system:dict:list', component: 'system/dict/index', status: '正常' },
-      { id: '13', parentId: '0', name: '侦测预警', type: '目录', order: 13, perms: '', component: '', status: '正常' },
-      { id: '131', parentId: '13', name: '侦测预警', type: '菜单', order: 1, perms: 'drone:alert:list', component: 'drone/alert/index', status: '正常' },
-      { id: '132', parentId: '13', name: '外部接口', type: '菜单', order: 2, perms: 'drone:interface:list', component: 'drone/interface/index', status: '正常' }
+      { id: '124', parentId: '12', name: '字典管理', type: '菜单', order: 4, perms: 'system:dict:list', component: 'system/dict/index', status: '正常' }
     ],
     dicts: [
       { id: '1', name: '用户性别', type: 'sys_user_sex', status: '正常', remark: '用户性别列表', createdAt: '2026-01-10 09:00:00' },

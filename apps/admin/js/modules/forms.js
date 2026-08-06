@@ -3,6 +3,16 @@
   const UI = () => global.AdminUI;
   const RE = () => global.AdminRichEditor;
   const FP = () => global.AdminFormPage;
+  const PICKER_PAGE_SIZE = 5;
+
+  const pickerPager = (total, page) => {
+    const totalPages = Math.max(1, Math.ceil(total / PICKER_PAGE_SIZE) || 1);
+    const current = Math.min(Math.max(1, Number(page) || 1), totalPages);
+    if (!total) return { current, totalPages, start: 0, markup: '' };
+    const start = (current - 1) * PICKER_PAGE_SIZE;
+    const markup = `<div class="device-picker-pager" aria-label="选择列表分页"><span>共 ${total} 条，第 ${current}/${totalPages} 页 · 每页 ${PICKER_PAGE_SIZE} 条</span><div><button type="button" class="secondary-btn" data-action="picker-page" data-page="${current - 1}"${current <= 1 ? ' disabled' : ''}>上一页</button><button type="button" class="secondary-btn" data-action="picker-page" data-page="${current + 1}"${current >= totalPages ? ' disabled' : ''}>下一页</button></div></div>`;
+    return { current, totalPages, start, markup };
+  };
 
   const normalizeField = (row) => (UI()?.normalizeEnrollField ? UI().normalizeEnrollField(row) : [...(Array.isArray(row) ? row : [])]);
   const defaultEnrollFields = () => [
@@ -78,8 +88,8 @@
     if (key === 'volunteers') {
       const src = isNew ? null : data.volunteers.find((v) => v.id === id);
       return src
-        ? { name: src.name || '', phone: src.phone || '', volunteerType: src.volunteerType || '低空爱好者', area: src.area || '', confirmedAt: src.confirmedAt || '', source: src.source || '线下报名确认' }
-        : { name: '', phone: '', volunteerType: '低空爱好者', area: '', confirmedAt: '', source: '线下报名确认' };
+        ? { name: src.name || '', phone: src.phone || '', volunteerType: src.volunteerType || '低空爱好者', area: src.area || '', confirmedAt: src.confirmedAt || '', userId: src.userId || '', entryMode: src.userId ? 'user' : 'manual' }
+        : { name: '', phone: '', volunteerType: '低空爱好者', area: '', confirmedAt: '', userId: '', entryMode: 'user' };
     }
     if (key === 'blacklist') {
       const src = isNew ? null : data.blacklist.find((b) => b.id === id);
@@ -91,27 +101,31 @@
       const src = isNew ? null : data.verification.find((v) => v.id === id);
       return src
         ? {
+          deviceMode: src.droneId ? 'ledger' : 'manual',
           droneId: src.droneId || '',
           aircraftName: src.aircraftName || src.name || '',
+          serialNumber: src.serialNumber || '',
           registrationMark: src.registrationMark || '',
           ownerType: src.ownerType || '个人',
           checkType: src.checkType || '证照核查',
           checkMethod: src.checkMethod || '材料核验',
           checkPlace: src.checkPlace || '',
-          result: src.result || '待补充',
+          result: src.result || '待核查',
           issueDesc: src.issueDesc || '',
           suggestion: src.suggestion || src.detail || '',
           followUpDate: src.followUpDate || ''
         }
         : {
+          deviceMode: 'ledger',
           droneId: '',
           aircraftName: '',
+          serialNumber: '',
           registrationMark: '',
           ownerType: '个人',
           checkType: '证照核查',
           checkMethod: '材料核验',
           checkPlace: '',
-          result: '待补充',
+          result: '待核查',
           issueDesc: '',
           suggestion: '',
           followUpDate: ''
@@ -173,21 +187,84 @@
     if (key === 'volunteers') {
       const streets = (typeof window !== 'undefined' && window.LowAltitudeMock?.yinzhouStreets) || [];
       const areaSelect = `<select required data-draft-field="area"><option value="">请选择所属区域</option>${streets.map((street) => `<option${(draft.area || '') === street ? ' selected' : ''}>${safe(street)}</option>`).join('')}</select>`;
-      return `<form class="form-stack" id="admin-form"><label>姓名${input('name', { required: true })}</label><label>手机号码${input('phone', { required: true, placeholder: '如 138****0000' })}</label><label>志愿者类型${select('volunteerType', ['低空爱好者', '社区网格员'])}</label><label>所属区域${areaSelect}</label><label>线下确认日期${input('confirmedAt', { required: true, type: 'date' })}</label><label>来源${select('source', ['线下报名确认'])}</label></form>`;
+      const isNew = Boolean(opts.isNew);
+      const entryMode = isNew ? (draft.entryMode === 'manual' ? 'manual' : 'user') : 'manual';
+      const enrolledPhones = new Set((opts.volunteers || []).filter((v) => (v.state || '在册') === '在册').map((v) => v.phone));
+      const candidateUsers = (opts.users || []).filter((u) => (u.type || '个人') === '个人' && (u.status || '正常') !== '已拉黑' && (!enrolledPhones.has(u.phone) || u.id === draft.userId));
+      const userQuery = String(opts.userQuery || opts.deviceQuery || '').trim().toLowerCase();
+      const filteredUsers = candidateUsers.filter((u) => !userQuery || `${u.name || ''}${u.phone || ''}${u.id || ''}`.toLowerCase().includes(userQuery));
+      const userPager = pickerPager(filteredUsers.length, opts.pickerPage);
+      const pagedUsers = filteredUsers.slice(userPager.start, userPager.start + PICKER_PAGE_SIZE);
+      const modeTabs = isNew
+        ? `<div class="form-entry-tabs" role="tablist" aria-label="录入方式"><button type="button" class="${entryMode === 'user' ? 'active' : ''}" data-action="volunteer-entry-mode" data-value="user" role="tab" aria-selected="${entryMode === 'user' ? 'true' : 'false'}">从用户选择</button><button type="button" class="${entryMode === 'manual' ? 'active' : ''}" data-action="volunteer-entry-mode" data-value="manual" role="tab" aria-selected="${entryMode === 'manual' ? 'true' : 'false'}">手工录入</button></div>`
+        : '';
+      const linkedNote = !isNew && draft.userId
+        ? `<div class="form-linked-user"><span>关联用户</span><b>${safe(draft.userId)}</b></div>`
+        : '';
+      const selectedUser = draft.userId
+        ? `<div class="device-picker-selected"><div><span>已选用户</span><b>${safe(draft.name || '—')}</b><small>${safe(draft.phone || '—')} · ${safe(draft.userId)}</small></div><button type="button" class="text-btn" data-action="volunteer-clear-user">重选</button></div>`
+        : '';
+      const userListItems = pagedUsers.length
+        ? pagedUsers.map((u) => {
+          const active = draft.userId === u.id ? ' is-active' : '';
+          return `<button type="button" class="device-picker-item${active}" data-action="volunteer-pick-user" data-id="${safe(u.id)}"><b>${safe(u.name)}</b><span>${safe(u.phone)}</span><small>${safe(u.id)}</small></button>`;
+        }).join('')
+        : `<div class="device-picker-empty">${candidateUsers.length ? '无匹配用户，请调整姓名或手机号关键词' : '暂无可选用户（已在册对象已过滤）'}</div>`;
+      const userBrowse = draft.userId ? '' : `<label class="device-picker-search"><span>搜索用户</span><input data-device-query="1" value="${safe(opts.userQuery || opts.deviceQuery || '')}" placeholder="姓名 / 手机号" autocomplete="off" /></label><div class="device-picker-list" role="listbox" aria-label="用户列表">${userListItems}</div>${userPager.markup}`;
+      const userPicker = isNew && entryMode === 'user'
+        ? `<fieldset class="config-fieldset device-picker"><legend>选择用户</legend>${selectedUser}${userBrowse}<input type="hidden" data-draft-field="userId" value="${safe(draft.userId || '')}" /><input type="hidden" data-draft-field="name" value="${safe(draft.name || '')}" /><input type="hidden" data-draft-field="phone" value="${safe(draft.phone || '')}" /></fieldset>`
+        : '';
+      const manualIdentity = !isNew || entryMode === 'manual'
+        ? `<label>姓名${input('name', { required: true })}</label><label>手机号码${input('phone', { required: true, placeholder: '如 138****0000' })}</label>`
+        : '';
+      return `<form class="form-stack" id="admin-form">${modeTabs}${linkedNote}${userPicker}${manualIdentity}<label>志愿者类型${select('volunteerType', ['低空爱好者', '社区网格员'])}</label><label>所属区域${areaSelect}</label><label>线下确认日期${input('confirmedAt', { required: true, type: 'date' })}</label></form>`;
     }
     if (key === 'blacklist') {
       return `<form class="form-stack" id="admin-form"><label>对象名称${input('name', { required: true })}</label><label>对象类型${select('type', ['个人用户', '企业用户', '授权账号'])}</label><label>拉黑原因${textarea('reason', { required: true })}</label><label>状态${select('state', ['已拉黑', '已取消'])}</label></form>`;
     }
     if (key === 'verification') {
-      const mock = global.LowAltitudeMock || {};
-      const drones = (mock.drones || []).filter((drone) => drone.status !== '已注销' && drone.registrationStatus !== '已注销');
-      const droneOptions = [`<option value="">请选择关联设备</option>`, ...drones.map((drone) => {
-        const name = (mock.uomValue ? mock.uomValue(drone, 'aircraftName') : drone.aircraftName) || drone.name || drone.id;
-        const mark = (mock.uomValue ? mock.uomValue(drone, 'registrationMark') : drone.registrationMark) || '待关联';
+      const mock = global.LowAltitudeMock || global.window?.LowAltitudeMock || {};
+      const deviceMode = draft.deviceMode === 'manual' ? 'manual' : 'ledger';
+      const query = String(opts.deviceQuery || '').trim().toLowerCase();
+      const allDrones = mock.drones || global.window?.LowAltitudeMock?.drones || [];
+      const drones = allDrones.filter((drone) => drone.status !== '已注销' && drone.registrationStatus !== '已注销');
+      const uomValue = mock.uomValue || global.window?.LowAltitudeMock?.uomValue;
+      const filtered = drones.filter((drone) => {
+        if (!query) return true;
+        const name = String((uomValue ? uomValue(drone, 'aircraftName') : drone.aircraftName) || drone.name || '');
+        const serial = String((uomValue ? uomValue(drone, 'serialNumber') : drone.serialNumber) || drone.sn || '');
+        const mark = String((uomValue ? uomValue(drone, 'registrationMark') : drone.registrationMark) || '');
         const owner = drone.accountRole === 'company' ? '企业' : '个人';
-        return `<option value="${safe(drone.id)}"${draft.droneId === drone.id ? ' selected' : ''}>${safe(name)} · ${safe(mark)} · ${owner}</option>`;
-      })].join('');
-      return `<form class="form-stack" id="admin-form"><label>关联设备<select required data-draft-field="droneId">${droneOptions}</select></label><div class="form-grid-2"><label>核查类型${select('checkType', ['证照核查', '现场核查', '抽查复核'])}</label><label>核查方式${select('checkMethod', ['材料核验', '上门核查', '电话复核'])}</label></div><label>核查地点${input('checkPlace', { required: true, placeholder: '如：鄞州区低空服务窗口 / 企业机库 / 远程复核' })}</label><label>核查结果${select('result', ['通过', '不通过', '待补充'])}</label><label>问题描述${textarea('issueDesc', { placeholder: '不通过或待补充时填写发现的问题' })}</label><label>处理意见${textarea('suggestion', { required: true, placeholder: '填写核查结论与后续处理意见' })}</label><label>计划跟进日期${input('followUpDate', { type: 'date' })}</label></form>`;
+        return [name, serial, mark, owner, drone.id].join(' ').toLowerCase().includes(query);
+      });
+      const devicePager = pickerPager(filtered.length, opts.pickerPage);
+      const pagedDrones = filtered.slice(devicePager.start, devicePager.start + PICKER_PAGE_SIZE);
+      const modeTabs = `<div class="form-entry-tabs" role="tablist" aria-label="设备选择方式"><button type="button" class="${deviceMode === 'ledger' ? 'active' : ''}" data-action="verification-device-mode" data-value="ledger" role="tab" aria-selected="${deviceMode === 'ledger' ? 'true' : 'false'}">从台账选择</button><button type="button" class="${deviceMode === 'manual' ? 'active' : ''}" data-action="verification-device-mode" data-value="manual" role="tab" aria-selected="${deviceMode === 'manual' ? 'true' : 'false'}">临时新增</button></div>`;
+      const selectedPanel = draft.droneId
+        ? `<div class="device-picker-selected"><div><span>已选设备</span><b>${safe(draft.aircraftName || '—')}</b><small>序列号 ${safe(draft.serialNumber || '—')} · 登记标志 ${safe(draft.registrationMark || '—')} · ${safe(draft.ownerType || '—')}</small></div><button type="button" class="text-btn" data-action="verification-clear-drone">重选</button></div>`
+        : '';
+      const listItems = pagedDrones.length
+        ? pagedDrones.map((drone) => {
+          const name = (uomValue ? uomValue(drone, 'aircraftName') : drone.aircraftName) || drone.name || drone.id;
+          const serial = (uomValue ? uomValue(drone, 'serialNumber') : drone.serialNumber) || drone.sn || '—';
+          const mark = (uomValue ? uomValue(drone, 'registrationMark') : drone.registrationMark) || '—';
+          const owner = drone.accountRole === 'company' ? '企业' : '个人';
+          return `<button type="button" class="device-picker-item" data-action="verification-pick-drone" data-id="${safe(drone.id)}"><b>${safe(name)}</b><span>${safe(serial)}</span><small>${safe(mark)} · ${owner}</small></button>`;
+        }).join('')
+        : '<div class="device-picker-empty">无匹配设备，可切换「临时新增」录入</div>';
+      const deviceBrowse = draft.droneId ? '' : `<label class="device-picker-search"><span>搜索设备</span><input data-device-query="1" value="${safe(opts.deviceQuery || '')}" placeholder="名称 / 设备序列号 / 登记标志" autocomplete="off" /></label><div class="device-picker-list" role="listbox" aria-label="设备台账">${listItems}</div>${devicePager.markup}`;
+      const ledgerPicker = deviceMode === 'ledger'
+        ? `<fieldset class="config-fieldset device-picker"><legend>关联设备</legend>${selectedPanel}${deviceBrowse}<input type="hidden" data-draft-field="droneId" value="${safe(draft.droneId || '')}" /></fieldset>`
+        : '';
+      const manualFields = deviceMode === 'manual'
+        ? `<fieldset class="config-fieldset"><legend>临时设备</legend><div class="form-grid-2"><label>无人机名称${input('aircraftName', { required: true, placeholder: '如：云翼 M30' })}</label><label>设备序列号${input('serialNumber', { required: true, placeholder: '如：SN-****-0192' })}</label></div><label>权属${select('ownerType', ['个人', '企业'])}</label><input type="hidden" data-draft-field="droneId" value="" /></fieldset>`
+        : '';
+      const ledgerHidden = deviceMode === 'ledger'
+        ? `<input type="hidden" data-draft-field="aircraftName" value="${safe(draft.aircraftName || '')}" /><input type="hidden" data-draft-field="serialNumber" value="${safe(draft.serialNumber || '')}" /><input type="hidden" data-draft-field="registrationMark" value="${safe(draft.registrationMark || '')}" /><input type="hidden" data-draft-field="ownerType" value="${safe(draft.ownerType || '')}" />`
+        : '';
+      const result = draft.result || '待核查';
+      const suggestionRequired = result === '通过' || result === '不通过';
+      return `<form class="form-stack" id="admin-form"><input type="hidden" data-draft-field="deviceMode" value="${deviceMode}" />${modeTabs}${ledgerPicker}${manualFields}${ledgerHidden}<div class="form-grid-2"><label>核查类型${select('checkType', ['证照核查', '现场核查', '抽查复核'])}</label><label>核查方式${select('checkMethod', ['材料核验', '上门核查', '电话复核'])}</label></div><label>核查地点${input('checkPlace', { required: true, placeholder: '如：鄞州区低空服务窗口 / 企业机库 / 远程复核' })}</label><label>核查结果${select('result', ['待核查', '通过', '不通过'])}</label><label>问题描述${textarea('issueDesc', { placeholder: '不通过时可填写发现的问题' })}</label><label>处理意见${textarea('suggestion', { required: suggestionRequired, placeholder: suggestionRequired ? '选择通过/不通过时必填核查结论与处理意见' : '待核查时可留空；完成核查时再填写' })}</label><label>计划跟进日期${input('followUpDate', { type: 'date' })}</label></form>`;
     }
     return '<div class="empty">未配置的表单模块</div>';
   };
@@ -207,12 +284,12 @@
     verification: ['新增核查', '编辑核查记录', '']
   };
 
-  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false }) => {
+  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false, users = [], volunteers = [], deviceQuery = '', userQuery = '', pickerPage = 1 }) => {
     const isNew = !id || id === 'new';
     const meta = titles[key] || ['新建', '编辑', ''];
     const title = isNew ? meta[0] : meta[1];
     const preview = ['activities', 'laws', 'news', 'guides', 'faq'].includes(key);
-    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields });
+    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields, isNew, users, volunteers, deviceQuery, userQuery, pickerPage });
     const page = FP().render({
       title,
       description: meta[2],

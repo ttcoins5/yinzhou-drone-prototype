@@ -186,7 +186,8 @@
     ],
     users: [
       { id: 'USR-001', name: '陈先生（演示）', type: '个人', idNumber: '3302**********0412', phone: '138****2408', address: '鄞州区（示例地址）', license: '未上传', licenseFileName: '', drones: 2, status: '正常' },
-      { id: 'USR-002', name: '李女士（演示）', type: '个人', idNumber: '3302**********0836', phone: '137****5119', address: '鄞州区某街道（示例）', license: '已上传', licenseFileName: '飞行执照图片.png', drones: 1, status: '待核查' }
+      { id: 'USR-002', name: '李女士（演示）', type: '个人', idNumber: '3302**********0836', phone: '137****5119', address: '鄞州区某街道（示例）', license: '已上传', licenseFileName: '飞行执照图片.png', drones: 1, status: '待核查' },
+      { id: 'USR-003', name: '吴先生（演示）', type: '个人', idNumber: '3302**********1190', phone: '135****6621', address: '鄞州区首南街道（示例）', license: '未上传', licenseFileName: '', drones: 0, status: '正常' }
     ],
     companies: [
       { id: 'ENT-001', name: '鄞州云航服务有限公司（演示）', creditCode: '9133**********8X', verified: '已认证', contact: '王女士（演示）', phone: '139****1682', syncState: '已同步', accounts: 6, drones: 5, status: '正常' },
