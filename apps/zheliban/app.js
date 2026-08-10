@@ -414,12 +414,16 @@
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
-  const flightPlanTimeMax = () => toDateTimeLocal(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
+  const flightPlanWindowMs = 48 * 60 * 60 * 1000;
+  const flightPlanTimeMin = () => toDateTimeLocal(new Date());
+  const flightPlanTimeMax = () => toDateTimeLocal(new Date(Date.now() + flightPlanWindowMs));
   const isWithinFlightPlanWindow = (value) => {
     if (!value) return false;
     const picked = new Date(String(value).replace(' ', 'T'));
     if (Number.isNaN(picked.getTime())) return false;
-    return picked.getTime() <= Date.now() + 2 * 24 * 60 * 60 * 1000;
+    const min = new Date(flightPlanTimeMin()).getTime();
+    const max = new Date(flightPlanTimeMax()).getTime();
+    return picked.getTime() >= min && picked.getTime() <= max;
   };
   const status = (value) => `<span class="status ${value === '已注销' || value === '已停用' ? 'neutral' : value.includes('异常') || value.includes('禁用') ? 'danger' : value.includes('待') || value.includes('补充') ? 'warning' : value.includes('已') || value.includes('有效') || value.includes('正常') ? 'success' : 'info'}">${safe(value)}</span>`;
   const certificateStatus = (value) => `<span class="status ${value === '已注销' ? 'neutral' : 'success'}">${safe(value)}</span>`;
@@ -987,6 +991,7 @@
     if (type === 'flight') {
       const editing = state.flightMode === 'edit';
       const draft = state.flightDraft;
+      const timeMin = flightPlanTimeMin();
       const timeMax = flightPlanTimeMax();
       const droneOptions = roleDrones().filter((x) => !['已注销'].includes(x.status)).map((x) => { const name = data.uomValue(x, 'aircraftName'); return `<option value="${safe(name)}"${draft.drone === name ? ' selected' : ''}>${safe(flightDroneLabel(x))}</option>`; }).join('');
       const selectOptions = (field, options) => options.map((value) => `<option value="${safe(value)}"${(draft[field] || '') === value ? ' selected' : ''}>${value || '请选择'}</option>`).join('');
@@ -1012,8 +1017,8 @@
         formField('任务性质', `<select required data-flight-field="missionNature">${selectOptions('missionNature', ['个人娱乐', '航拍摄影', '巡检巡查', '培训演练', '其他'])}</select>`),
         formField('操控模式', `<select required data-flight-field="controlMode">${selectOptions('controlMode', ['', '视距内飞行', '超视距飞行'])}</select>`),
         formField('飞行模式', `<select required data-flight-field="flightMode">${selectOptions('flightMode', ['', '手动飞行', '自主飞行'])}</select>`),
-        formField('预计开始时间', `<input required type="datetime-local" max="${timeMax}" data-flight-field="startAt" value="${safe(draft.startAt || '')}" />`),
-        formField('预计结束时间', `<input required type="datetime-local" max="${timeMax}" data-flight-field="endAt" value="${safe(draft.endAt || '')}" />`),
+        formField('预计开始时间', `<input required type="datetime-local" min="${timeMin}" max="${timeMax}" data-flight-field="startAt" value="${safe(draft.startAt || '')}" />`),
+        formField('预计结束时间', `<input required type="datetime-local" min="${timeMin}" max="${timeMax}" data-flight-field="endAt" value="${safe(draft.endAt || '')}" />`),
         formField('飞行区域', `<div class="compound-field">${areaShot}<div class="fixed-field"><select required data-flight-field="city">${cityOptions}</select><input required data-flight-field="street" value="${safe(draft.street || '')}" placeholder="请填写飞行区域" /></div></div>`),
         formField('飞行设备', `<select required data-flight-field="drone">${droneOptions}</select>`),
         formField('通信联络方式', `<div class="fixed-field"><input required data-flight-field="operator" value="${safe(draft.operator || '')}" placeholder="联系人" /><input required data-flight-field="operatorPhone" value="${safe(draft.operatorPhone || '')}" placeholder="联系电话" /></div>`),
@@ -1213,7 +1218,7 @@
       const draft = state.flightDraft;
       if (state.areaShot !== 'done') { announce('请上传飞行区域截图'); return; }
       if (!isWithinFlightPlanWindow(draft.startAt) || !isWithinFlightPlanWindow(draft.endAt)) {
-        announce('飞行计划时间只能选择当前时刻起未来三天内（含之前时间）');
+        announce('飞行计划时间只能选择当前时刻起未来 48 小时内');
         return;
       }
       const stamp = `${data.now} 09:30`;

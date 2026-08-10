@@ -180,7 +180,7 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   click({ action: 'modal', modal: 'flight' });
   if (app.innerHTML.includes('自主申报与执行确认') || !['飞行活动类型', '任务性质', '操控模式', '飞行模式', '预计开始时间', '预计结束时间', '通信联络方式', '最大飞行高度', '起飞地', '宁波市鄞州区', '请选择市区', 'data-flight-field="city"', '请填写飞行区域', '以UOM平台审批为准', 'required-mark', 'flight-area-file'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('起降备降场地') || app.innerHTML.includes('请填写飞行区域说明') || app.innerHTML.includes('<span>宁波市鄞州区</span>')) errors.push('浙里办飞行计划字段未与 UOM 申请信息口径对齐');
   if (!app.innerHTML.includes('form-disclaimer') || !app.innerHTML.includes('form-disclaimer-mark')) errors.push('飞行计划表单 UOM 审批提示未强调展示');
-  if (!app.innerHTML.includes('上传飞行区域截图') || !app.innerHTML.includes('请选择街道') || !app.innerHTML.includes('datetime-local') || !app.innerHTML.includes('max=') || !app.innerHTML.includes('一般飞行活动') || !app.innerHTML.includes('特殊飞行活动') || !app.innerHTML.includes('钟公庙街道') || !app.innerHTML.includes('宁波市海曙区')) errors.push('浙里办飞行计划未支持区域截图、市区配置下拉、起飞地街道、活动类型配置项或时间上限');
+  if (!app.innerHTML.includes('上传飞行区域截图') || !app.innerHTML.includes('请选择街道') || !app.innerHTML.includes('datetime-local') || !app.innerHTML.includes('min=') || !app.innerHTML.includes('max=') || !app.innerHTML.includes('一般飞行活动') || !app.innerHTML.includes('特殊飞行活动') || !app.innerHTML.includes('钟公庙街道') || !app.innerHTML.includes('宁波市海曙区')) errors.push('浙里办飞行计划未支持区域截图、市区配置下拉、起飞地街道、活动类型配置项或时间上下限（当前起 48 小时）');
   setValidity(false);
   click({ action: 'submit-modal' });
   if (!app.innerHTML.includes('role="dialog"')) errors.push('浙里办表单校验失败状态未保留');
