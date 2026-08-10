@@ -28,6 +28,14 @@
 .timeline-note{margin:0 0 10px;color:var(--muted);font-size:12px}
 .modal-wide{width:min(100%,760px)}
 .form-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.compound-field{display:grid;gap:8px}
+.region-cascade{grid-template-columns:minmax(0,1fr)}
+.region-cascade select,.region-cascade input,.region-cascade .admin-region-panel{grid-column:1/-1}
+.admin-region-panel{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;height:180px;padding:8px;border:1px solid var(--line);border-radius:12px;background:#1d2430;overflow:hidden}
+.admin-region-panel .region-picker-highlight{position:absolute;left:10px;right:10px;top:50%;height:36px;transform:translateY(-50%);border-radius:8px;background:rgba(255,255,255,.1);pointer-events:none}
+.admin-region-col{position:relative;z-index:1;display:flex;flex-direction:column;gap:2px;height:100%;overflow:auto;padding:72px 0;scrollbar-width:thin}
+.admin-region-col .region-picker-item{flex:0 0 36px;display:flex;align-items:center;justify-content:center;width:100%;padding:0 4px;border:0;border-radius:6px;background:transparent;color:rgba(255,255,255,.42);font:600 12px/1.2 inherit;cursor:pointer}
+.admin-region-col .region-picker-item.is-active{color:#fff}
 .cover-upload{display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;align-items:stretch}
 .cover-upload-preview{display:block;width:140px;height:96px;object-fit:cover;border:1px solid var(--line);border-radius:8px;background:#f5f8fb}
 .content-cover-media{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin:0 0 14px;background:#0f2740}
@@ -236,3 +244,70 @@
 .device-picker-pager>div{display:flex;gap:8px}
 .device-picker-pager .secondary-btn{min-height:28px;padding:0 10px;font-size:12px}
 .device-picker-list{max-height:none}
+
+/* dashboard-board-layout */
+.dashboard-license{margin-bottom:14px}
+.dashboard-license .dashboard-panel--license{overflow:hidden}
+.dashboard-license .panel-body{padding-top:12px}
+.license-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.license-card{appearance:none;display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:108px;padding:18px 20px;border:1px solid var(--line);border-radius:2px;background:#f7fbff;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.license-card--pending{background:#fff}
+.license-card span{display:block;color:#606266;font-size:13px}
+.license-card strong{display:block;margin-top:6px;font-size:34px;font-weight:600;line-height:1;letter-spacing:-.03em;color:var(--ink)}
+.license-card em{display:block;margin-top:8px;color:#909399;font-size:12px;font-style:normal;line-height:1.4}
+.license-ring{--p:0;position:relative;flex:0 0 64px;width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--primary) calc(var(--p) * 1%),#e4eef6 0);display:grid;place-items:center}
+.license-ring:before{position:absolute;inset:7px;border-radius:50%;background:#fff;content:""}
+.license-ring b{position:relative;z-index:1;font-size:13px;font-weight:600;color:var(--primary)}
+.license-card--pending .license-ring{background:conic-gradient(#7aa7cb calc(var(--p) * 1%),#eef3f8 0)}
+.license-card--pending .license-ring b{color:#5b7f9c}
+.license-card.is-interactive:hover,.license-card.is-active{border-color:#91c3f2;background:#eef6ff;box-shadow:0 0 0 1px rgba(23,105,176,.12)}
+.dashboard-flight{display:grid;gap:12px}
+.dashboard-flight-toolbar-host,.dashboard-flight-toolbar{display:block}
+.dashboard-flight-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line);border-radius:2px;background:#fff}
+.dashboard-flight-toolbar .range-hint{margin:0;color:#909399;font-size:12px}
+.dashboard-flight-toolbar .range-hint b{color:var(--ink);font-weight:500}
+.dashboard-flight-toolbar .range-filter{justify-items:end}
+.range-filter--board{max-width:none}
+.range-filter--board .range-chips{display:inline-flex;flex-wrap:wrap;gap:0;padding:2px;border:1px solid #e4e7ed;border-radius:3px;background:#f5f7fa;justify-content:flex-end}
+.range-filter--board .range-chip{min-height:28px;padding:0 12px;border:0;border-radius:2px;background:transparent;color:#606266;font:400 12px inherit;cursor:pointer}
+.range-filter--board .range-chip:hover{color:var(--primary)}
+.range-filter--board .range-chip.is-active{background:#fff;color:var(--primary);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.range-filter--board .range-custom{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:8px}
+.range-filter--board .range-custom label{display:grid;gap:4px;color:#909399;font-size:12px}
+.range-filter--board .range-custom input{min-height:30px;padding:0 8px;border:1px solid #dcdfe6;border-radius:3px;font:12px inherit;color:var(--ink);background:#fff}
+.dashboard-flight-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.95fr);grid-template-areas:"takeoff activity" "sortie sortie";gap:14px;align-items:stretch}
+.dashboard-panel--takeoff{grid-area:takeoff}
+.dashboard-panel--activity{grid-area:activity}
+.dashboard-panel--sortie{grid-area:sortie}
+.dashboard-flight .dashboard-panel{display:flex;flex-direction:column;min-height:0}
+.dashboard-flight .dashboard-panel > .panel-body{flex:1;display:flex;flex-direction:column;min-height:0}
+.dashboard-panel--takeoff .panel-body,.dashboard-panel--activity .panel-body{padding-top:10px}
+.dashboard-flight .dist-list{display:grid;gap:4px;flex:1;align-content:start}
+.dashboard-flight .dist-row{display:grid;grid-template-columns:minmax(84px,112px) minmax(0,1fr) 32px;align-items:center;gap:12px;min-height:34px;padding:4px 6px;border:1px solid transparent;border-radius:2px;background:transparent;font-size:13px}
+.dashboard-flight .dist-row span{color:#606266;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard-flight .dist-row b{color:var(--ink);font-size:13px;font-weight:600;text-align:right}
+.dashboard-flight .dist-bar{height:8px;border-radius:2px;background:#edf2f7;overflow:hidden}
+.dashboard-flight .dist-bar i{display:block;height:100%;border-radius:inherit;background:var(--primary)}
+.dashboard-flight .dist-row.is-interactive:hover,.dashboard-flight .dist-row.is-interactive.is-active{border-color:#d9ecff;background:#f5faff}
+.sortie-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sortie-card{appearance:none;display:flex;flex-direction:column;gap:8px;width:100%;min-height:118px;padding:16px 18px;border:1px solid var(--line);border-radius:2px;background:#f7fbff;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.sortie-card:nth-child(2),.sortie-card:nth-child(3){background:#fff}
+.sortie-card span{color:#606266;font-size:13px}
+.sortie-card strong{font-size:32px;font-weight:600;line-height:1;letter-spacing:-.03em;color:var(--ink)}
+.sortie-bar{display:block;height:6px;overflow:hidden;border-radius:2px;background:#e4eef6}
+.sortie-bar b{display:block;height:100%;border-radius:inherit;background:var(--primary)}
+.sortie-card:nth-child(3) .sortie-bar b{background:#7aa7cb}
+.sortie-card em{color:#909399;font-size:12px;font-style:normal;line-height:1.4}
+.sortie-card.is-interactive:hover,.sortie-card.is-active{border-color:#91c3f2;background:#eef6ff;box-shadow:0 0 0 1px rgba(23,105,176,.12)}
+.dashboard-page .dashboard-license,.dashboard-page .dashboard-flight{animation:dashboard-rise .4s ease both}
+.dashboard-page .dashboard-license{animation-delay:.12s}
+.dashboard-page .dashboard-flight{animation-delay:.18s}
+.dashboard-page.is-settled .dashboard-license,.dashboard-page.is-settled .dashboard-flight,.dashboard-page.is-settled .license-card,.dashboard-page.is-settled .sortie-card,.dashboard-page.is-settled .dist-row{animation:none!important;opacity:1;transform:none}
+@media (max-width:1100px){
+  .dashboard-flight-layout{grid-template-columns:1fr;grid-template-areas:"takeoff" "activity" "sortie"}
+  .sortie-grid,.license-grid{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  .dashboard-flight-toolbar{align-items:stretch}
+  .dashboard-flight-toolbar .range-filter,.range-filter--board .range-chips{justify-content:flex-start}
+}

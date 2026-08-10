@@ -71,8 +71,8 @@
       const supplement = (!isNew && id === 'USR-001' ? data.profiles.personal.supplement : user?.supplement) || {};
       const normalized = data.normalizePersonalSupplement ? data.normalizePersonalSupplement(supplement) : supplement;
       return user
-        ? { name: user.name || '', idNumber: user.idNumber || '', phone: user.phone || '', address: user.address || '', district: normalized.district || '', emergencyContact: normalized.emergencyContact || '', emergencyPhone: normalized.emergencyPhone || '' }
-        : { name: '', idNumber: '', phone: '', address: '', district: '', emergencyContact: '', emergencyPhone: '' };
+        ? { name: user.name || '', idNumber: user.idNumber || '', phone: user.phone || '', address: user.address || '', province: normalized.province || '', city: normalized.city || '', district: normalized.district || '', addressDetail: normalized.addressDetail || '', emergencyContact: normalized.emergencyContact || '', emergencyPhone: normalized.emergencyPhone || '' }
+        : { name: '', idNumber: '', phone: '', address: '', province: '', city: '', district: '', addressDetail: '', emergencyContact: '', emergencyPhone: '' };
     }
     if (key === 'companies') {
       const company = isNew ? null : data.companies.find((c) => c.id === id);
@@ -170,9 +170,14 @@
       return `<form class="form-stack" id="admin-form"><label>内容标题${input('title', { required: true })}</label><label>发布单位${input('source', { required: true })}</label><div class="form-grid-2">${key === 'laws' ? `<label>生效开始日期${input('effectiveStart', { required: true, type: 'date' })}</label><label>生效结束日期${input('effectiveEnd', { required: true, type: 'date' })}</label>` : ''}<label>发布状态${select('status', ['已发布', '已下架'])}</label><label><span>排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div><label><span>封面</span>${coverUpload}${draft.coverName ? `<small class="record-note">已选：${safe(draft.coverName)}</small>` : ''}</label><label>摘要${textarea('summary', { required: true })}</label><label><span>正文（富文本）</span>${rich.mountMarkup('body', rich.textToHtml(draft.body), '请输入正文')}</label></form>`;
     }
     if (key === 'users') {
-      const streets = (typeof global !== 'undefined' && global.LowAltitudeMock?.yinzhouStreets) || [];
-      const districtSelect = `<select data-draft-field="district"><option value="">请选择鄞州区街道</option>${streets.map((street) => `<option${(draft.district || '') === street ? ' selected' : ''}>${safe(street)}</option>`).join('')}</select>`;
-      return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>姓名${input('name', { required: true })}</label><label>身份证号${input('idNumber', { required: true })}</label><label>手机号码${input('phone', { required: true })}</label><label>地址${textarea('address', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>所属地${districtSelect}</label><label>紧急联系人${input('emergencyContact')}</label><label>紧急联系电话${input('emergencyPhone', { type: 'tel' })}</label></fieldset></form>`;
+      const mock = (typeof window !== 'undefined' && window.LowAltitudeMock) || {};
+      const picked = mock.normalizeResidenceSelection ? mock.normalizeResidenceSelection(draft) : draft;
+      const provinces = (mock.residenceProvinceOptions && mock.residenceProvinceOptions()) || [];
+      const cities = (mock.residenceCityOptions && mock.residenceCityOptions(picked.province)) || [];
+      const districts = (mock.residenceDistrictOptions && mock.residenceDistrictOptions(picked.province, picked.city)) || [];
+      const col = (level, items, selected) => `<div class="region-picker-col admin-region-col" role="listbox">${items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-region" data-level="${level}" data-value="${safe(item)}">${safe(item)}</button>`).join('')}</div>`;
+      const addressField = `<div class="compound-field region-cascade"><div class="admin-region-panel" aria-label="省市区联动选择"><div class="region-picker-highlight" aria-hidden="true"></div>${col('province', provinces, picked.province)}${col('city', cities, picked.city)}${col('district', districts, picked.district)}</div>${input('addressDetail', { placeholder: '请填写详细地址，如街道、路名门牌号' })}</div>`;
+      return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>姓名${input('name', { required: true })}</label><label>身份证号${input('idNumber', { required: true })}</label><label>手机号码${input('phone', { required: true })}</label><label>地址${textarea('address', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>常住地址${addressField}</label><label>紧急联系人${input('emergencyContact')}</label><label>紧急联系电话${input('emergencyPhone', { type: 'tel' })}</label></fieldset></form>`;
     }
     if (key === 'companies') {
       return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>企业名称${input('name', { required: true })}</label><label>统一社会信用代码${input('creditCode', { required: true })}</label><label>认证状态${select('verified', ['已认证', '待认证'])}</label><label>授权联系人${input('contact', { required: true })}</label><label>联系电话${input('phone', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>无人机主要用途${input('droneUsage')}</label><label>安全负责人${input('safetyOfficer')}</label><label>安全负责人电话${input('safetyPhone')}</label></fieldset></form>`;

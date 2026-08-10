@@ -1,6 +1,21 @@
 (function () {
   const app = document.querySelector('#app');
   const data = window.LowAltitudeMock;
+  const normalizeConfigRows = (rows = [], prefix = 'CFG') => (rows || []).map((item, index) => ({
+    id: item.id || `${prefix}-${String(index + 1).padStart(2, '0')}`,
+    name: String(item.name || '').trim(),
+    sort: Number(item.sort) > 0 ? Number(item.sort) : index + 1,
+    state: item.state === '停用' ? '停用' : '启用',
+    updated: item.updated || data.now
+  })).filter((item) => item.name);
+  const syncFlightConfigLists = () => {
+    data.streetConfigs = normalizeConfigRows(data.streetConfigs || [], 'ST');
+    data.flightActivityTypes = normalizeConfigRows(data.flightActivityTypes || [], 'FAT');
+    data.districtConfigs = normalizeConfigRows(data.districtConfigs || [], 'DST');
+    const enabled = data.enabledConfigNames || ((rows) => (rows || []).filter((item) => (item.state || '启用') === '启用').map((item) => item.name));
+    data.yinzhouStreets = enabled(data.streetConfigs);
+    data.ningboDistricts = enabled(data.districtConfigs);
+  };
   const ledgerStorageKey = 'yinzhou-uom-ledger-v2';
   const profileStorageKey = 'yinzhou-profile-v2';
   const publicServiceStorageKey = 'yinzhou-public-service-v2';
@@ -114,14 +129,6 @@
       else if (drone.group === '使用设备') drone.ownerCompany = data.profiles.personal.affiliatedCompany || '';
     }
   };
-  const emptyDroneDraft = () => ({
-    manufacturerModel: '',
-    serialNumber: '',
-    aircraftName: '',
-    emptyWeight: '',
-    maxTakeoffWeight: '',
-    aircraftType: '多旋翼航空器'
-  });
   const syncDeviceCounts = () => {
     ['personal', 'company'].forEach((role) => {
       data.profiles[role].devices = data.drones.filter((drone) => drone.accountRole === role && droneRegistrationState(drone) !== '已注销').length;
@@ -297,6 +304,9 @@
         data.feedbackForms = mapped;
       }
       if (Array.isArray(saved.messages)) data.messages = normalizeMessages(saved.messages);
+      if (Array.isArray(saved.streetConfigs)) data.streetConfigs = saved.streetConfigs;
+      if (Array.isArray(saved.flightActivityTypes)) data.flightActivityTypes = saved.flightActivityTypes;
+      if (Array.isArray(saved.districtConfigs)) data.districtConfigs = saved.districtConfigs;
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
   const normalizeMessages = (messages) => messages.map((item) => ({
@@ -310,24 +320,46 @@
     read: Boolean(item.read)
   }));
   const persistPublicService = () => {
-    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, uomGuide: data.uomGuide })); } catch {}
+    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, uomGuide: data.uomGuide, streetConfigs: data.streetConfigs, flightActivityTypes: data.flightActivityTypes, districtConfigs: data.districtConfigs })); } catch {}
   };
   hydratePublicService();
+  syncFlightConfigLists();
   data.messages = normalizeMessages(data.messages || []);
+  const normalizeTakeoffStreet = (value, streetFallback = '') => {
+    const streets = data.yinzhouStreets || [];
+    const raw = String(value || '').trim();
+    if (streets.includes(raw)) return raw;
+    const hit = streets.find((street) => raw.includes(street));
+    if (hit) return hit;
+    return streets.includes(streetFallback) ? streetFallback : '';
+  };
+  const defaultFlightCity = () => {
+    const districts = data.ningboDistricts || [];
+    const preferred = districts.includes('鄞州区') ? '鄞州区' : (districts[0] || '鄞州区');
+    return (data.formatNingboDistrictLabel ? data.formatNingboDistrictLabel(preferred) : `宁波市${preferred}`);
+  };
+  const normalizeFlightCity = (value) => {
+    const label = data.formatNingboDistrictLabel ? data.formatNingboDistrictLabel(value) : String(value || '').trim();
+    const districts = data.ningboDistricts || [];
+    const shortName = data.parseNingboDistrictName ? data.parseNingboDistrictName(label) : label.replace(/^宁波市/, '');
+    if (districts.includes(shortName)) return data.formatNingboDistrictLabel ? data.formatNingboDistrictLabel(shortName) : `宁波市${shortName}`;
+    return label || defaultFlightCity();
+  };
   const normalizeFlight = (flight) => {
     if (!flight.startAt || !flight.endAt) {
       const match = String(flight.time || '').match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})[—-](\d{2}:\d{2})/);
       if (match) { flight.startAt = `${match[1]}T${match[2]}`; flight.endAt = `${match[1]}T${match[3]}`; }
     }
-    flight.city = '宁波市鄞州区';
-    flight.street = flight.street || String(flight.area || '').replace(/^申报区域\s*/, '').replace(/^宁波市鄞州区\s*/, '') || '';
+    flight.city = normalizeFlightCity(flight.city || '宁波市鄞州区');
+    flight.street = flight.street || String(flight.area || '').replace(/^申报区域\s*/, '').replace(/^宁波市[\u4e00-\u9fa5]+区\s*/, '').replace(/^宁波市鄞州区\s*/, '') || '';
     flight.purpose = flight.purpose || (String(flight.title || '').includes('巡查') ? '场地巡查' : '低空安全宣传活动保障');
     flight.activityType = flight.activityType || '一般飞行活动';
     flight.missionNature = flight.missionNature || flight.purpose || '个人娱乐';
     flight.controlMode = flight.controlMode || '';
     flight.flightMode = flight.flightMode || '';
     flight.maxAltitude = flight.maxAltitude || '';
-    flight.takeoffSite = flight.takeoffSite || '';
+    flight.takeoffSite = normalizeTakeoffStreet(flight.takeoffSite, flight.street);
+    flight.areaShot = flight.areaShot || '';
     if (!flight.accountRole) flight.accountRole = flight.owner === data.profiles.company.name ? 'company' : 'personal';
     return flight;
   };
@@ -341,7 +373,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, droneDraft: emptyDroneDraft(), flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -376,6 +408,19 @@
     .replace(/<div class="login-help">[\s\S]*?<\/div>/gu, '')
     .replace(/<p><\/p>|<small><\/small>/gu, '');
   const safe = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  const requiredMark = () => '<span class="required-mark" aria-hidden="true">*</span>';
+  const formField = (label, control, { required = true, className = '' } = {}) => `<div class="form-field${className ? ` ${className}` : ''}"><span class="form-field-label">${safe(label)}${required ? requiredMark() : ''}</span>${control}</div>`;
+  const toDateTimeLocal = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const flightPlanTimeMax = () => toDateTimeLocal(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
+  const isWithinFlightPlanWindow = (value) => {
+    if (!value) return false;
+    const picked = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(picked.getTime())) return false;
+    return picked.getTime() <= Date.now() + 2 * 24 * 60 * 60 * 1000;
+  };
   const status = (value) => `<span class="status ${value === '已注销' || value === '已停用' ? 'neutral' : value.includes('异常') || value.includes('禁用') ? 'danger' : value.includes('待') || value.includes('补充') ? 'warning' : value.includes('已') || value.includes('有效') || value.includes('正常') ? 'success' : 'info'}">${safe(value)}</span>`;
   const certificateStatus = (value) => `<span class="status ${value === '已注销' ? 'neutral' : 'success'}">${safe(value)}</span>`;
   const navActive = (key, active) => active === key
@@ -394,7 +439,7 @@
   const mobileChrome = (fallback = 'home') => `<header class="mobile-chrome"><div class="mobile-status-bar" aria-hidden="true"><span class="mobile-status-time">9:41</span><span class="mobile-status-icons"><i class="mobile-signal"></i><i class="mobile-wifi"></i><i class="mobile-battery"></i></span></div><div class="mobile-app-bar"><button type="button" class="mobile-back" data-action="back" data-fallback="${safe(fallback)}" aria-label="返回"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h1 class="mobile-app-title">鄞州低空智护</h1><button type="button" class="mobile-more" data-action="mobile-more" aria-label="更多"><span></span><span></span><span></span></button></div></header>`;
   const shell = (content, active = route()) => {
     const profile = data.profiles[state.role];
-    const extras = `${state.modal ? modal() : ''}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
+    const extras = `${state.modal ? modal() : ''}${state.regionPickerOpen ? regionPicker() : ''}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
     if (state.viewport === 'desktop') {
       return `${desktopChrome(profile, active)}<section class="main-content">${content}</section>${extras}`;
     }
@@ -483,7 +528,7 @@
       ? [['姓名', p.name], ['身份证号', p.idNumber], ['手机号码', p.phone], ...(p.affiliatedCompany ? [['所属公司', p.affiliatedCompany]] : [])]
       : [['企业名称', p.name], ['统一社会信用代码', p.creditCode], ['认证状态', p.verified], ['授权联系人', p.contact], ['联系电话', p.phone]];
     const supplementRows = personal
-      ? [['所属地', supplement.district || '未填写'], ['紧急联系人', supplement.emergencyContact || '未填写'], ['紧急联系电话', supplement.emergencyPhone || '未填写']]
+      ? [['常住地址', (data.formatResidenceAddress ? data.formatResidenceAddress(supplement) : '') || '未填写'], ['紧急联系人', supplement.emergencyContact || '未填写'], ['紧急联系电话', supplement.emergencyPhone || '未填写']]
       : [['无人机主要用途', supplement.droneUsage || '未填写'], ['安全负责人', supplement.safetyOfficer || '未填写'], ['安全负责人电话', supplement.safetyPhone || '未填写']];
     return shell(`${title(personal ? '个人资料' : '企业资料', true, 'profile')}<div class="profile-detail-stack"><section class="profile-detail-card"><header><div><span class="profile-kicker">${personal ? '个人基本信息' : '企业基本信息'}</span><h2>基本信息</h2></div></header><div class="detail-grid">${rows.map(([key, value]) => `<div><span>${key}</span><b>${safe(value)}</b></div>`).join('')}</div></section><section class="profile-detail-card"><header><div><span class="profile-kicker">${personal ? '个人补充信息' : '企业补充信息'}</span><h2>补充信息</h2></div><button class="secondary-btn compact-btn" data-action="modal" data-modal="${personal ? 'supplement' : 'company-supplement'}">编辑</button></header><div class="detail-grid">${supplementRows.map(([key, value]) => `<div><span>${key}</span><b>${safe(value)}</b></div>`).join('')}</div></section></div>`, 'profile');
   };
@@ -555,16 +600,73 @@
     const tabs = company
       ? `<button class="${state.droneGroup === 'all' ? 'active' : ''}" data-action="group" data-value="all">全部</button><button class="${state.droneGroup === '未注销' ? 'active' : ''}" data-action="group" data-value="未注销">未注销</button><button class="${state.droneGroup === '已注销' ? 'active' : ''}" data-action="group" data-value="已注销">已注销</button>`
       : `<button class="${state.droneGroup === 'all' ? 'active' : ''}" data-action="group" data-value="all">全部</button><button class="${state.droneGroup === '持有设备' ? 'active' : ''}" data-action="group" data-value="持有设备">持有设备</button><button class="${state.droneGroup === '使用设备' ? 'active' : ''}" data-action="group" data-value="使用设备">使用设备</button>`;
-    const droneSearch = `<div class="filter-bar filter-bar--with-action"><input id="search" value="${safe(state.query)}" placeholder="搜索产品名称、登记标志或序号" aria-label="搜索" /><button class="primary-btn" data-action="open-drone-create">新增设备</button></div>`;
+    const droneSearch = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索产品名称、登记标志或序号" aria-label="搜索" /></div>`;
     return shell(`${pageToolbar('home', `<div class="tabs drone-tabs">${tabs}</div>`)}${droneSearch}${list(roleDrones().filter((x) => matchesDroneFilter(x) && match(`${data.uomValue(x, 'aircraftName')}${data.uomValue(x, 'serialNumber')}${data.uomValue(x, 'registrationMark')}${x.group}`)), (x) => `<article class="list-row"><div><strong>${safe(data.uomValue(x, 'aircraftName'))}</strong><p>登记标志 ${safe(droneMarkLabel(x))}<br />序号 ${safe(data.uomValue(x, 'serialNumber'))}</p><div class="meta">${droneListMeta(x)}</div></div><button class="text-link" data-action="detail" data-kind="drone" data-id="${safe(x.id)}">详情</button></article>`)}`, 'services');
   };
   const flightTime = (item) => item.startAt && item.endAt ? `${item.startAt.replace('T', ' ')}—${item.endAt.replace('T', ' ')}` : item.time || '—';
-  const flightArea = (item) => `${item.city || '宁波市鄞州区'}${item.street || item.area || '—'}`;
+  const flightArea = (item) => {
+    const text = `${item.city || defaultFlightCity()}${item.street || item.area || '—'}`;
+    return item.areaShot ? `${text}（已上传区域截图）` : text;
+  };
+  const flightStartDay = (item) => {
+    if (item.startAt) return String(item.startAt).slice(0, 10);
+    const matchDay = String(item.time || '').match(/(\d{4}-\d{2}-\d{2})/);
+    return matchDay ? matchDay[1] : '';
+  };
+  const matchesFlightFilters = (item) => {
+    if (state.flightExecView === '未执行' && item.executed !== '未执行') return false;
+    if (state.flightExecView === '已执行' && item.executed === '未执行') return false;
+    if (state.role === 'company') {
+      const day = flightStartDay(item);
+      if (state.flightRangeStart && (!day || day < state.flightRangeStart)) return false;
+      if (state.flightRangeEnd && (!day || day > state.flightRangeEnd)) return false;
+    }
+    return true;
+  };
+  const filteredFlights = () => roleFlights().filter((x) => matchesFlightFilters(x) && match(`${x.title}${x.missionNature || ''}${x.purpose || ''}${x.operator || ''}`));
+  const escapeExcelCell = (value) => String(value ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const downloadFlightExcel = (rows) => {
+    const company = state.role === 'company';
+    const headers = company
+      ? ['计划编号', '计划名称', '飞行活动类型', '任务性质', '预计开始时间', '预计结束时间', '飞行区域', '起飞地', '飞行设备', '提交人', '执行状态']
+      : ['计划编号', '计划名称', '飞行活动类型', '任务性质', '预计开始时间', '预计结束时间', '飞行区域', '起飞地', '飞行设备', '通信联络人', '执行状态'];
+    const tableRows = rows.map((item) => {
+      const start = item.startAt ? item.startAt.replace('T', ' ') : (String(item.time || '').split('—')[0] || '—');
+      const end = item.endAt ? item.endAt.replace('T', ' ') : '—';
+      const cells = company
+        ? [item.id, item.title, item.activityType, item.missionNature || item.purpose, start, end, flightArea(item), item.takeoffSite, item.drone, displayCompanyName(item.operator || '—'), item.executed]
+        : [item.id, item.title, item.activityType, item.missionNature || item.purpose, start, end, flightArea(item), item.takeoffSite, item.drone, item.operator, item.executed];
+      return `<tr>${cells.map((cell) => `<td>${escapeExcelCell(cell || '—')}</td>`).join('')}</tr>`;
+    }).join('');
+    const html = `${String.fromCharCode(0xFEFF)}<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>飞行计划</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table><thead><tr>${headers.map((header) => `<th>${escapeExcelCell(header)}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+    const stamp = String(data.now || 'export').replaceAll('-', '');
+    const fileName = `飞行计划导出_${stamp}.xls`;
+    if (typeof Blob === 'function' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && typeof document?.createElement === 'function') {
+      const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.rel = 'noopener';
+      document.body?.appendChild?.(link);
+      link.click();
+      link.remove?.();
+      setTimeout(() => { try { URL.revokeObjectURL(link.href); } catch {} }, 1200);
+    }
+    return { count: rows.length, fileName };
+  };
   const flights = () => {
     const company = state.role === 'company';
     const actionButtons = company ? '' : `<button class="primary-btn" data-action="open-flight-create">新增飞行计划</button><button class="secondary-btn" data-action="open-batch">批量导入</button>`;
     const searchHint = company ? '搜索计划名称、任务性质或提交人' : '搜索计划名称或任务性质';
-    return shell(`${pageToolbar('home')}${filter(searchHint)}${listActions(actionButtons)}${list(roleFlights().filter((x) => match(`${x.title}${x.missionNature || ''}${x.purpose || ''}${x.operator || ''}`)), (x) => {
+    const execTabs = `<div class="tabs flight-tabs" aria-label="执行状态筛选"><button class="${state.flightExecView === 'all' ? 'active' : ''}" data-action="flight-exec-view" data-value="all">全部</button><button class="${state.flightExecView === '未执行' ? 'active' : ''}" data-action="flight-exec-view" data-value="未执行">未执行</button><button class="${state.flightExecView === '已执行' ? 'active' : ''}" data-action="flight-exec-view" data-value="已执行">已执行</button></div>`;
+    const rangeFilter = company
+      ? `<div class="flight-range-filter" aria-label="时间段筛选"><label><span>开始日期</span><input type="date" data-flight-range="start" value="${safe(state.flightRangeStart || '')}" /></label><label><span>结束日期</span><input type="date" data-flight-range="end" value="${safe(state.flightRangeEnd || '')}" /></label></div>`
+      : '';
+    const searchBar = company
+      ? `<div class="filter-bar filter-bar--with-action"><input id="search" value="${safe(state.query)}" placeholder="${searchHint}" aria-label="搜索" /><button type="button" class="secondary-btn" data-action="export-flights">导出</button></div>`
+      : filter(searchHint);
+    const rows = filteredFlights();
+    return shell(`${pageToolbar('home', execTabs)}${rangeFilter}${searchBar}${listActions(actionButtons)}${list(rows, (x) => {
       const submitter = displayCompanyName(x.operator || '—');
       const lineExtra = company
         ? `提交人 ${safe(submitter)}<br />设备 ${safe(x.drone || '—')}`
@@ -781,7 +883,7 @@
       return value === '' ? '—' : value;
     };
     const rows = kind === 'flight'
-      ? [['计划编号', item.id], ['计划名称', item.title], ...(state.role === 'company' ? [['提交人', displayCompanyName(item.operator || '—')]] : []), ['飞行活动类型', item.activityType || '—'], ['任务性质', item.missionNature || item.purpose || '—'], ['操控模式', item.controlMode || '—'], ['飞行模式', item.flightMode || '—'], ['预计开始时间', item.startAt ? item.startAt.replace('T', ' ') : '—'], ['预计结束时间', item.endAt ? item.endAt.replace('T', ' ') : '—'], ['飞行区域', flightArea(item)], ['飞行设备', item.drone || '—'], ['通信联络方式', [item.operator, item.operatorPhone].filter(Boolean).join(' ') || '—'], ['最大飞行高度', item.maxAltitude ? `${item.maxAltitude} 米` : '—'], ['起降备降场地', item.takeoffSite || '—'], ['审批材料', item.approval || '未上传截图'], ['计划状态', item.status], ['执行状态', item.executed]]
+      ? [['计划编号', item.id], ['计划名称', item.title], ...(state.role === 'company' ? [['提交人', displayCompanyName(item.operator || '—')]] : []), ['飞行活动类型', item.activityType || '—'], ['任务性质', item.missionNature || item.purpose || '—'], ['操控模式', item.controlMode || '—'], ['飞行模式', item.flightMode || '—'], ['预计开始时间', item.startAt ? item.startAt.replace('T', ' ') : '—'], ['预计结束时间', item.endAt ? item.endAt.replace('T', ' ') : '—'], ['飞行区域', flightArea(item)], ['飞行设备', item.drone || '—'], ['通信联络方式', [item.operator, item.operatorPhone].filter(Boolean).join(' ') || '—'], ['最大飞行高度', item.maxAltitude ? `${item.maxAltitude} 米` : '—'], ['起飞地', item.takeoffSite || '—'], ['审批材料', item.approval || '未上传截图'], ['计划状态', item.status], ['执行状态', item.executed]]
       : fields ? fields.map(([key, label]) => [label, kind === 'drone' ? droneValue(key) : data.uomValue(item, key)]).concat(kind === 'certificate' ? [['上传时间', item.updated || '—']] : state.role === 'company' && kind === 'drone' ? [['归属', item.owner || '—'], ['分配飞手', assignedPilot ? assignedPilot.name : '未分配'], ['设备状态', droneRegistrationState(item)]] : [['归属', item.owner || '—'], ['设备类型', item.group || '—'], ...(kind === 'drone' && item.group === '使用设备' && (item.ownerCompany || data.profiles.personal.affiliatedCompany) ? [['所属公司', item.ownerCompany || data.profiles.personal.affiliatedCompany]] : []), ['设备状态', droneRegistrationState(item)]]) : Object.entries(item).map(([key, value]) => [({id:'编号',model:'设备型号',sn:'设备编号',registrationMark:'登记标志',serialNumber:'序号',holder:'持有人',source:'数据来源',owner:'归属',group:'分组',status:'状态',certificate:'登记证',drone:'关联设备',state:'状态',updated:'更新时间',title:'标题',time:'计划时间',area:'申报区域',executed:'执行状态',kind:'类别',date:'日期'})[key] || key, value]);
     const fallback = kind === 'certificate' ? 'certificates' : kind === 'drone' ? 'drones' : kind === 'flight' ? 'flights' : 'knowledge';
     const detailTitle = kind === 'certificate' ? 'UOM 登记证详情' : kind === 'drone' ? '无人机详情' : kind === 'flight' ? '飞行计划详情' : '详情';
@@ -812,6 +914,14 @@
       ? '<b>上传 UOM 已注销登记证照片</b><small>支持 JPG、PNG，单张不超过 10 MB，识别后确认注销并同步关联无人机</small>'
       : '<b>上传后自动识别登记证字段</b><small>支持 JPG、PNG，单张不超过 10 MB，建议上传清晰完整的登记证照片</small>';
     return `<label class="upload-drop" for="certificate-file"><input id="certificate-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span>${uploadHint}<em>选择图片</em></label>${state.ocr.status === 'error' ? `<div class="upload-error" role="alert">${safe(state.ocr.message || '图片无法识别，请重新上传 JPG 或 PNG 图片。')}</div>` : ''}`;
+  };
+  const regionPicker = () => {
+    const draft = state.regionPickerDraft || {};
+    const provinces = (data.residenceProvinceOptions && data.residenceProvinceOptions()) || [];
+    const cities = (data.residenceCityOptions && data.residenceCityOptions(draft.province)) || [];
+    const districts = (data.residenceDistrictOptions && data.residenceDistrictOptions(draft.province, draft.city)) || [];
+    const col = (level, label, items, selected) => `<div class="region-picker-col" role="listbox" aria-label="${label}">${items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-region" data-level="${level}" data-value="${safe(item)}" role="option" aria-selected="${selected === item ? 'true' : 'false'}">${safe(item)}</button>`).join('') || `<span class="region-picker-empty">暂无选项</span>`}</div>`;
+    return `<div class="region-picker-layer" role="dialog" aria-modal="true" aria-label="选择省市区"><section class="region-picker"><div class="region-picker-wheel"><div class="region-picker-highlight" aria-hidden="true"></div>${col('province', '省', provinces, draft.province)}${col('city', '市', cities, draft.city)}${col('district', '区', districts, draft.district)}</div><div class="region-picker-actions"><button type="button" class="secondary-btn" data-action="cancel-region-picker">取消</button><button type="button" class="primary-btn" data-action="confirm-region-picker">确定</button></div></section></div>`;
   };
   const modal = () => {
     const type = state.modal;
@@ -877,14 +987,40 @@
     if (type === 'flight') {
       const editing = state.flightMode === 'edit';
       const draft = state.flightDraft;
-      const droneOptions = roleDrones().filter((x) => !['已注销', '已禁用'].includes(x.status)).map((x) => { const name = data.uomValue(x, 'aircraftName'); return `<option value="${safe(name)}"${draft.drone === name ? ' selected' : ''}>${safe(flightDroneLabel(x))}</option>`; }).join('');
+      const timeMax = flightPlanTimeMax();
+      const droneOptions = roleDrones().filter((x) => !['已注销'].includes(x.status)).map((x) => { const name = data.uomValue(x, 'aircraftName'); return `<option value="${safe(name)}"${draft.drone === name ? ' selected' : ''}>${safe(flightDroneLabel(x))}</option>`; }).join('');
       const selectOptions = (field, options) => options.map((value) => `<option value="${safe(value)}"${(draft[field] || '') === value ? ' selected' : ''}>${value || '请选择'}</option>`).join('');
+      const takeoffOptions = [`<option value="">请选择街道</option>`, ...(data.yinzhouStreets || []).map((street) => `<option value="${safe(street)}"${draft.takeoffSite === street ? ' selected' : ''}>${safe(street)}</option>`)].join('');
+      const cityValue = normalizeFlightCity(draft.city || defaultFlightCity());
+      const cityOptions = [`<option value="">请选择市区</option>`, ...(data.ningboDistricts || []).map((district) => {
+        const label = data.formatNingboDistrictLabel ? data.formatNingboDistrictLabel(district) : `宁波市${district}`;
+        return `<option value="${safe(label)}"${cityValue === label ? ' selected' : ''}>${safe(label)}</option>`;
+      })].join('');
+      const activityTypeOptions = (data.enabledConfigNames ? data.enabledConfigNames(data.flightActivityTypes) : []).filter(Boolean);
+      const activityTypes = activityTypeOptions.length ? activityTypeOptions : ['一般飞行活动', '特殊飞行活动'];
       const shot = state.flightShot === 'recognizing'
         ? `<div class="recognition-state"><span class="recognition-loader" aria-hidden="true"></span><h3>正在识别审批截图</h3><p>正在提取计划时间、区域与设备信息…</p></div>`
         : state.flightShot === 'done'
           ? `<div class="recognition-success">${icon('M5 12l4 4L19 6')}<span><b>审批截图识别完成</b><small>字段已自动回填，可手动修正</small></span></div><div class="actions" style="margin:8px 0 4px"><button class="text-link" data-action="reset-flight-shot">重新上传截图</button></div>`
           : `<label class="upload-drop slim" for="flight-approval-file"><input id="flight-approval-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span><b>已在 UOM 审批通过？上传截图自动识别</b><small>支持 JPG、PNG；识别后自动回填计划字段，也可全部手动填写</small><em>选择截图</em></label>`;
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">${editing ? '修改飞行计划' : '新增飞行计划'}</h2>${shot}<form class="form-stack" id="prototype-form"><label>计划名称<input required data-flight-field="title" value="${safe(draft.title || '')}" placeholder="如：河道巡查航拍" /></label><label>飞行活动类型<select required data-flight-field="activityType">${selectOptions('activityType', ['一般飞行活动', '特殊飞行活动'])}</select></label><label>任务性质<select required data-flight-field="missionNature">${selectOptions('missionNature', ['个人娱乐', '航拍摄影', '巡检巡查', '培训演练', '其他'])}</select></label><label>操控模式<select data-flight-field="controlMode">${selectOptions('controlMode', ['', '视距内飞行', '超视距飞行'])}</select></label><label>飞行模式<select data-flight-field="flightMode">${selectOptions('flightMode', ['', '手动飞行', '自主飞行'])}</select></label><label>预计开始时间<input required type="datetime-local" data-flight-field="startAt" value="${safe(draft.startAt || '')}" /></label><label>预计结束时间<input required type="datetime-local" data-flight-field="endAt" value="${safe(draft.endAt || '')}" /></label><label>飞行区域<div class="fixed-field"><span>宁波市鄞州区</span><input required data-flight-field="street" value="${safe(draft.street || '')}" placeholder="请填写街道名称" /></div></label><label>飞行设备<select data-flight-field="drone">${droneOptions}</select></label><label>通信联络方式<div class="fixed-field"><input required data-flight-field="operator" value="${safe(draft.operator || '')}" placeholder="联系人" /><input required data-flight-field="operatorPhone" value="${safe(draft.operatorPhone || '')}" placeholder="联系电话" /></div></label><label>最大飞行高度<div class="fixed-field"><input required data-flight-field="maxAltitude" value="${safe(draft.maxAltitude || '')}" placeholder="如 110" inputmode="numeric" /><span>米</span></div></label><label>起降备降场地<input data-flight-field="takeoffSite" value="${safe(draft.takeoffSite || '')}" placeholder="请填写起降或备降场地" /></label></form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-flight">${editing ? '保存修改' : '提交计划'}</button></div></section></div>`;
+      const areaShot = state.areaShot === 'done'
+        ? `<div class="inline-upload-done"><span>已上传区域截图<small>${safe(state.areaShotName || '区域截图.jpg')}</small></span><button type="button" class="text-link" data-action="reset-area-shot">重新上传</button></div>`
+        : `<label class="upload-drop slim field-upload" for="flight-area-file"><input id="flight-area-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span><b>上传飞行区域截图</b><small>支持 JPG、PNG，可配合下方文字说明</small><em>选择截图</em></label>`;
+      const form = [
+        formField('计划名称', `<input required data-flight-field="title" value="${safe(draft.title || '')}" placeholder="如：河道巡查航拍" />`),
+        formField('飞行活动类型', `<select required data-flight-field="activityType">${selectOptions('activityType', activityTypes)}</select>`),
+        formField('任务性质', `<select required data-flight-field="missionNature">${selectOptions('missionNature', ['个人娱乐', '航拍摄影', '巡检巡查', '培训演练', '其他'])}</select>`),
+        formField('操控模式', `<select required data-flight-field="controlMode">${selectOptions('controlMode', ['', '视距内飞行', '超视距飞行'])}</select>`),
+        formField('飞行模式', `<select required data-flight-field="flightMode">${selectOptions('flightMode', ['', '手动飞行', '自主飞行'])}</select>`),
+        formField('预计开始时间', `<input required type="datetime-local" max="${timeMax}" data-flight-field="startAt" value="${safe(draft.startAt || '')}" />`),
+        formField('预计结束时间', `<input required type="datetime-local" max="${timeMax}" data-flight-field="endAt" value="${safe(draft.endAt || '')}" />`),
+        formField('飞行区域', `<div class="compound-field">${areaShot}<div class="fixed-field"><select required data-flight-field="city">${cityOptions}</select><input required data-flight-field="street" value="${safe(draft.street || '')}" placeholder="请填写飞行区域" /></div></div>`),
+        formField('飞行设备', `<select required data-flight-field="drone">${droneOptions}</select>`),
+        formField('通信联络方式', `<div class="fixed-field"><input required data-flight-field="operator" value="${safe(draft.operator || '')}" placeholder="联系人" /><input required data-flight-field="operatorPhone" value="${safe(draft.operatorPhone || '')}" placeholder="联系电话" /></div>`),
+        formField('最大飞行高度', `<div class="fixed-field"><input required data-flight-field="maxAltitude" value="${safe(draft.maxAltitude || '')}" placeholder="如 110" inputmode="numeric" /><span>米</span></div>`),
+        formField('起飞地', `<select required data-flight-field="takeoffSite">${takeoffOptions}</select>`)
+      ].join('');
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">${editing ? '修改飞行计划' : '新增飞行计划'}</h2><p class="form-disclaimer" role="note"><span class="form-disclaimer-mark" aria-hidden="true">!</span><span>以UOM平台审批为准，提交的信息不做审核批准，不能代替UOM平台法定审批流程。</span></p>${shot}<form class="form-stack" id="prototype-form">${form}</form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-flight">${editing ? '保存修改' : '提交计划'}</button></div></section></div>`;
     }
     if (type === 'batch') {
       if (state.batchStage === 'preview') {
@@ -895,9 +1031,9 @@
     }
     if (type === 'supplement') {
       const draft = state.supplementDraft;
-      const streets = data.yinzhouStreets || [];
-      const districtOptions = [`<option value="">请选择鄞州区街道</option>`, ...streets.map((street) => `<option${draft.district === street ? ' selected' : ''}>${safe(street)}</option>`)].join('');
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">编辑个人补充信息</h2><form class="form-stack" id="supplement-form"><label>所属地<select data-supplement-field="district">${districtOptions}</select></label><label>紧急联系人<input data-supplement-field="emergencyContact" value="${safe(draft.emergencyContact || '')}" /></label><label>紧急联系电话<input type="tel" inputmode="numeric" data-supplement-field="emergencyPhone" value="${safe(draft.emergencyPhone || '')}" /></label></form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-supplement">保存补充信息</button></div></section></div>`;
+      const regionLabel = (data.formatResidenceRegionLabel && data.formatResidenceRegionLabel(draft)) || [draft.province, draft.city, draft.district].filter(Boolean).join(' / ');
+      const addressField = `<div class="compound-field region-cascade"><button type="button" class="region-trigger${regionLabel ? '' : ' is-placeholder'}" data-action="open-region-picker"><span>${safe(regionLabel || '请选择省市区')}</span><i class="region-trigger-caret" aria-hidden="true"></i></button><input data-supplement-field="addressDetail" value="${safe(draft.addressDetail || '')}" placeholder="请填写详细地址，如街道、路名门牌号" /></div>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">编辑个人补充信息</h2><form class="form-stack" id="supplement-form">${formField('常住地址', addressField)}${formField('紧急联系人', `<input data-supplement-field="emergencyContact" value="${safe(draft.emergencyContact || '')}" />`, { required: false })}${formField('紧急联系电话', `<input type="tel" inputmode="numeric" data-supplement-field="emergencyPhone" value="${safe(draft.emergencyPhone || '')}" />`, { required: false })}</form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-supplement">保存补充信息</button></div></section></div>`;
     }
     if (type === 'company-supplement') {
       const draft = state.companyDraft;
@@ -906,11 +1042,6 @@
     if (type === 'member') {
       const draft = state.memberDraft;
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">添加关联用户</h2><form class="form-stack" id="member-form"><label>关联用户姓名<input required data-member-field="name" value="${safe(draft.name || '')}" /></label><label>关联关系<select data-member-field="relation">${['法定代表人', '授权经办人', '安全负责人'].map((value) => `<option${draft.relation === value ? ' selected' : ''}>${value}</option>`).join('')}</select></label><label>联系电话<input required data-member-field="phone" value="${safe(draft.phone || '')}" /></label></form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-member">确认添加</button></div></section></div>`;
-    }
-    if (type === 'drone-create') {
-      const draft = state.droneDraft;
-      const typeOptions = ['多旋翼航空器', '多桨或多轴航空器', '固定翼航空器', '直升机航空器', '其他'].map((value) => `<option${draft.aircraftType === value ? ' selected' : ''}>${value}</option>`).join('');
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">新增设备</h2><form class="form-stack" id="drone-create-form"><label>航空器型号和制造人<input required data-drone-field="manufacturerModel" value="${safe(draft.manufacturerModel || '')}" placeholder="如：H20 / 某制造商" /></label><label>序号<input required data-drone-field="serialNumber" value="${safe(draft.serialNumber || '')}" placeholder="设备出厂序号" /></label><label>产品名称<input required data-drone-field="aircraftName" value="${safe(draft.aircraftName || '')}" placeholder="如：安巡 H20" /></label><label>空机重量<input required data-drone-field="emptyWeight" value="${safe(draft.emptyWeight || '')}" placeholder="如：1.35 kg" /></label><label>最大起飞重量<input required data-drone-field="maxTakeoffWeight" value="${safe(draft.maxTakeoffWeight || '')}" placeholder="如：1.35 kg" /></label><label>类型<select required data-drone-field="aircraftType">${typeOptions}</select></label></form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-drone-create">保存设备</button></div></section></div>`;
     }
     if (type === 'assign-pilot') {
       const drone = data.drones.find((item) => item.id === state.assignDraft.droneId);
@@ -951,12 +1082,14 @@
     syncViewportChrome(name);
     app.innerHTML = present(!state.role || name === 'login' ? login() : page());
     if (state.modal) setTimeout(() => document.querySelector('#modal-title')?.focus(), 0);
+    if (state.regionPickerOpen) setTimeout(() => document.querySelectorAll('.region-picker-item.is-active').forEach((node) => node.scrollIntoView({ block: 'center' })), 0);
   };
   const announce = (text) => { state.toast = text; render(); setTimeout(() => { state.toast = ''; render(); }, 2200); };
   const closeModal = () => {
     const returnFocus = state.returnFocus;
     state.ocrRequest += 1;
     state.pendingDrone = '';
+    state.regionPickerOpen = false;
     state.modal = null;
     render();
     if (returnFocus) setTimeout(() => document.querySelector(returnFocus)?.focus(), 0);
@@ -985,6 +1118,9 @@
       state.query = '';
       state.certificateView = '全部';
       state.droneGroup = 'all';
+      state.flightExecView = 'all';
+      state.flightRangeStart = '';
+      state.flightRangeEnd = '';
       state.messageView = 'all';
       state.mineActivities = false;
       if (route() === 'home') render(); else go('home');
@@ -995,6 +1131,9 @@
       state.query = '';
       state.certificateView = '全部';
       state.droneGroup = 'all';
+      state.flightExecView = 'all';
+      state.flightRangeStart = '';
+      state.flightRangeEnd = '';
       if (route() === 'login') render(); else go('login');
     }
     if (action === 'modal') {
@@ -1013,7 +1152,10 @@
         if (!member || member.relation === '法定代表人' || member.state === '已停用') { announce('该用户不可设置飞手'); state.modal = null; return; }
         state.tagDraft = { id: member.id, isPilot: !!member.isPilot };
       }
-      if (state.modal === 'supplement') state.supplementDraft = { ...(data.profiles.personal.supplement || {}) };
+      if (state.modal === 'supplement') {
+        state.supplementDraft = { ...(data.normalizePersonalSupplement ? data.normalizePersonalSupplement(data.profiles.personal.supplement || {}) : (data.profiles.personal.supplement || {})) };
+        state.regionPickerOpen = false;
+      }
       if (state.modal === 'company-supplement') state.companyDraft = { ...(data.profiles.company.supplement || {}) };
       if (state.modal === 'company-profile') state.companyDraft = { name: data.profiles.company.name || '', creditCode: data.profiles.company.creditCode || '', verified: data.profiles.company.verified || '已认证', contact: data.profiles.company.contact || '', phone: data.profiles.company.phone || '', syncState: data.profiles.company.syncState || '已同步' };
       if (state.modal === 'license') state.licenseImage = '';
@@ -1021,26 +1163,30 @@
       if (state.modal === 'flight') {
         if (state.role === 'company') { announce('企业账号仅可查看本公司飞行计划'); state.modal = null; return; }
         const profile = data.profiles[state.role] || {};
-        const firstDrone = roleDrones().find((x) => !['已注销', '已禁用'].includes(x.status));
+        const firstDrone = roleDrones().find((x) => !['已注销'].includes(x.status));
         state.flightMode = 'create';
         state.pendingFlight = '';
         state.flightShot = 'empty';
         state.flightShotRequest += 1;
-        state.flightDraft = { title: '', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '', flightMode: '', startAt: '', endAt: '', city: '宁波市鄞州区', street: '', purpose: '', drone: data.uomValue(firstDrone || {}, 'aircraftName'), operator: profile.name || '', operatorPhone: profile.phone || '', maxAltitude: '', takeoffSite: '' };
+        state.areaShot = 'empty';
+        state.areaShotName = '';
+        state.flightDraft = { title: '', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '', flightMode: '', startAt: '', endAt: '', city: defaultFlightCity(), street: '', purpose: '', drone: data.uomValue(firstDrone || {}, 'aircraftName'), operator: profile.name || '', operatorPhone: profile.phone || '', maxAltitude: '', takeoffSite: '' };
       }
       render();
     }
     if (action === 'open-flight-create') {
       if (state.role === 'company') { announce('企业账号仅可查看本公司飞行计划'); return; }
       const profile = data.profiles[state.role];
-      const firstDrone = roleDrones().find((x) => !['已注销', '已禁用'].includes(x.status));
+      const firstDrone = roleDrones().find((x) => !['已注销'].includes(x.status));
       state.modal = 'flight';
       state.returnFocus = '[data-action="open-flight-create"]';
       state.flightMode = 'create';
       state.pendingFlight = '';
       state.flightShot = 'empty';
       state.flightShotRequest += 1;
-      state.flightDraft = { title: '', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '', flightMode: '', startAt: '', endAt: '', city: '宁波市鄞州区', street: '', purpose: '', drone: data.uomValue(firstDrone || {}, 'aircraftName'), operator: profile.name, operatorPhone: profile.phone, maxAltitude: '', takeoffSite: '' };
+      state.areaShot = 'empty';
+      state.areaShotName = '';
+      state.flightDraft = { title: '', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '', flightMode: '', startAt: '', endAt: '', city: defaultFlightCity(), street: '', purpose: '', drone: data.uomValue(firstDrone || {}, 'aircraftName'), operator: profile.name, operatorPhone: profile.phone, maxAltitude: '', takeoffSite: '' };
       render();
     }
     if (action === 'edit-flight') {
@@ -1054,26 +1200,35 @@
       state.pendingFlight = item.id;
       state.flightShot = item.approval && item.approval.includes('已上传') ? 'done' : 'empty';
       state.flightShotRequest += 1;
-      state.flightDraft = { title: item.title, activityType: item.activityType || '一般飞行活动', missionNature: item.missionNature || item.purpose || '个人娱乐', controlMode: item.controlMode || '', flightMode: item.flightMode || '', startAt: item.startAt || '', endAt: item.endAt || '', city: item.city || '宁波市鄞州区', street: item.street || item.area || '', purpose: item.purpose || item.missionNature || '', drone: item.drone, operator: item.operator || '', operatorPhone: item.operatorPhone || '', maxAltitude: item.maxAltitude || '', takeoffSite: item.takeoffSite || '' };
+      state.areaShot = item.areaShot ? 'done' : 'empty';
+      state.areaShotName = item.areaShot || '';
+      state.flightDraft = { title: item.title, activityType: item.activityType || '一般飞行活动', missionNature: item.missionNature || item.purpose || '个人娱乐', controlMode: item.controlMode || '', flightMode: item.flightMode || '', startAt: item.startAt || '', endAt: item.endAt || '', city: normalizeFlightCity(item.city || defaultFlightCity()), street: item.street || item.area || '', purpose: item.purpose || item.missionNature || '', drone: item.drone, operator: item.operator || '', operatorPhone: item.operatorPhone || '', maxAltitude: item.maxAltitude || '', takeoffSite: normalizeTakeoffStreet(item.takeoffSite, item.street) };
       render();
     }
     if (action === 'reset-flight-shot') { state.flightShot = 'empty'; state.flightShotRequest += 1; render(); }
+    if (action === 'reset-area-shot') { state.areaShot = 'empty'; state.areaShotName = ''; render(); }
     if (action === 'submit-flight' || (action === 'submit-modal' && state.modal === 'flight')) {
       if (state.role === 'company') { state.modal = null; announce('企业账号仅可查看本公司飞行计划'); return; }
       const form = document.querySelector('#prototype-form'); if (form && !form.reportValidity()) return;
       const draft = state.flightDraft;
+      if (state.areaShot !== 'done') { announce('请上传飞行区域截图'); return; }
+      if (!isWithinFlightPlanWindow(draft.startAt) || !isWithinFlightPlanWindow(draft.endAt)) {
+        announce('飞行计划时间只能选择当前时刻起未来三天内（含之前时间）');
+        return;
+      }
       const stamp = `${data.now} 09:30`;
+      const areaShotValue = state.areaShotName || '已上传区域截图';
       if (state.flightMode === 'edit') {
         const item = data.flights.find((x) => x.id === state.pendingFlight);
         if (!item || item.executed !== '未执行') { state.modal = null; announce('该计划已确认执行，飞行后不可修改'); return; }
-        Object.assign(item, { title: draft.title, activityType: draft.activityType, missionNature: draft.missionNature, controlMode: draft.controlMode, flightMode: draft.flightMode, startAt: draft.startAt, endAt: draft.endAt, city: '宁波市鄞州区', street: draft.street, purpose: draft.missionNature || draft.purpose, time: flightTime(draft), area: flightArea(draft), drone: draft.drone, operator: draft.operator, operatorPhone: draft.operatorPhone, maxAltitude: draft.maxAltitude, takeoffSite: draft.takeoffSite, approval: state.flightShot === 'done' ? '已上传 UOM 审批截图' : item.approval });
+        Object.assign(item, { title: draft.title, activityType: draft.activityType, missionNature: draft.missionNature, controlMode: draft.controlMode, flightMode: draft.flightMode, startAt: draft.startAt, endAt: draft.endAt, city: normalizeFlightCity(draft.city), street: draft.street, purpose: draft.missionNature || draft.purpose, time: flightTime(draft), area: flightArea({ ...draft, city: normalizeFlightCity(draft.city), areaShot: '' }), areaShot: areaShotValue, drone: draft.drone, operator: draft.operator, operatorPhone: draft.operatorPhone, maxAltitude: draft.maxAltitude, takeoffSite: draft.takeoffSite, approval: state.flightShot === 'done' ? '已上传 UOM 审批截图' : item.approval });
         item.history = [...(item.history || []), { time: stamp, action: '修改计划', detail: '飞行前修改计划信息（mock）' }];
         persistPublicService();
         state.modal = null;
         announce('飞行计划已修改，变更已记入记录');
         return;
       }
-      data.flights.unshift({ id: `FP-${data.now.replaceAll('-', '')}-${String(data.flights.length + 21).padStart(3, '0')}`, title: draft.title, activityType: draft.activityType, missionNature: draft.missionNature, controlMode: draft.controlMode, flightMode: draft.flightMode, startAt: draft.startAt, endAt: draft.endAt, city: '宁波市鄞州区', street: draft.street, purpose: draft.missionNature || draft.purpose, time: flightTime(draft), area: flightArea(draft), drone: draft.drone, operator: draft.operator, operatorPhone: draft.operatorPhone, maxAltitude: draft.maxAltitude, takeoffSite: draft.takeoffSite, owner: data.profiles[state.role].name, accountRole: state.role, approval: state.flightShot === 'done' ? '已上传 UOM 审批截图' : '未上传截图', status: '已登记', executed: '未执行', history: [{ time: stamp, action: '新增计划', detail: state.flightShot === 'done' ? '提交飞行计划并上传 UOM 审批截图（mock）' : '手动填写并提交飞行计划（mock）' }] });
+      data.flights.unshift({ id: `FP-${data.now.replaceAll('-', '')}-${String(data.flights.length + 21).padStart(3, '0')}`, title: draft.title, activityType: draft.activityType, missionNature: draft.missionNature, controlMode: draft.controlMode, flightMode: draft.flightMode, startAt: draft.startAt, endAt: draft.endAt, city: normalizeFlightCity(draft.city), street: draft.street, purpose: draft.missionNature || draft.purpose, time: flightTime(draft), area: flightArea({ ...draft, city: normalizeFlightCity(draft.city), areaShot: '' }), areaShot: areaShotValue, drone: draft.drone, operator: draft.operator, operatorPhone: draft.operatorPhone, maxAltitude: draft.maxAltitude, takeoffSite: draft.takeoffSite, owner: data.profiles[state.role].name, accountRole: state.role, approval: state.flightShot === 'done' ? '已上传 UOM 审批截图' : '未上传截图', status: '已登记', executed: '未执行', history: [{ time: stamp, action: '新增计划', detail: state.flightShot === 'done' ? '提交飞行计划并上传 UOM 审批截图（mock）' : '手动填写并提交飞行计划（mock）' }] });
       persistPublicService();
       state.modal = null;
       announce('飞行计划已提交，已归集至区级台账');
@@ -1121,9 +1276,53 @@
       announce('已从浙里办同步最新基本信息');
       return;
     }
+    if (action === 'open-region-picker') {
+      const seed = state.supplementDraft || {};
+      state.regionPickerDraft = data.normalizeResidenceSelection
+        ? data.normalizeResidenceSelection(seed)
+        : { province: seed.province || '', city: seed.city || '', district: seed.district || '' };
+      state.regionPickerOpen = true;
+      render();
+      return;
+    }
+    if (action === 'cancel-region-picker') {
+      state.regionPickerOpen = false;
+      render();
+      return;
+    }
+    if (action === 'confirm-region-picker') {
+      const picked = data.normalizeResidenceSelection
+        ? data.normalizeResidenceSelection(state.regionPickerDraft || {})
+        : (state.regionPickerDraft || {});
+      state.supplementDraft.province = picked.province || '';
+      state.supplementDraft.city = picked.city || '';
+      state.supplementDraft.district = picked.district || '';
+      state.regionPickerOpen = false;
+      render();
+      return;
+    }
+    if (action === 'pick-region') {
+      const level = target.dataset.level;
+      const value = target.dataset.value || '';
+      const next = { ...(state.regionPickerDraft || {}) };
+      if (level === 'province') {
+        next.province = value;
+        next.city = '';
+        next.district = '';
+      } else if (level === 'city') {
+        next.city = value;
+        next.district = '';
+      } else if (level === 'district') {
+        next.district = value;
+      }
+      state.regionPickerDraft = data.normalizeResidenceSelection ? data.normalizeResidenceSelection(next) : next;
+      render();
+      return;
+    }
     if (action === 'save-supplement') {
       data.profiles.personal.supplement = data.normalizePersonalSupplement ? data.normalizePersonalSupplement(state.supplementDraft) : { ...state.supplementDraft };
       persistProfile();
+      state.regionPickerOpen = false;
       state.modal = null;
       announce('个人补充信息已保存');
     }
@@ -1161,12 +1360,6 @@
       state.pendingDrone = drone.id;
       state.ocrRequest += 1;
       state.ocr = emptyOcr();
-      render();
-    }
-    if (action === 'open-drone-create') {
-      state.modal = 'drone-create';
-      state.returnFocus = '[data-action="open-drone-create"]';
-      state.droneDraft = emptyDroneDraft();
       render();
     }
     if (action === 'update-certificate') { state.modal = 'certificate'; state.returnFocus = `[data-action="update-certificate"][data-id="${safe(target.dataset.id)}"]`; state.certificateMode = 'update'; state.pendingCertificate = target.dataset.id; state.pendingDrone = ''; state.ocrRequest += 1; state.ocr = emptyOcr(); render(); }
@@ -1224,43 +1417,6 @@
       state.ocrRequest += 1;
       state.modal = null;
       announce(state.certificateMode === 'cancel' || registrationState === '已注销' ? (state.certificateMode === 'cancel' ? '登记证已注销，关联设备台账已同步' : '登记证已更新为已注销，关联设备台账已同步') : '识别信息已保存，设备台账已自动更新');
-    }
-    if (action === 'submit-drone-create') {
-      const form = document.querySelector('#drone-create-form'); if (form && !form.reportValidity()) return;
-      const draft = state.droneDraft;
-      const serial = String(draft.serialNumber || '').trim();
-      if (roleDrones().some((item) => String(item.serialNumber || item.sn || '') === serial)) {
-        announce('该序号已存在，请核对后重试');
-        return;
-      }
-      const drone = {
-        id: `DR-${String(data.drones.length + 1).padStart(3, '0')}`,
-        manufacturerModel: draft.manufacturerModel.trim(),
-        serialNumber: serial,
-        aircraftName: draft.aircraftName.trim(),
-        emptyWeight: draft.emptyWeight.trim(),
-        maxTakeoffWeight: draft.maxTakeoffWeight.trim(),
-        aircraftType: draft.aircraftType || '多旋翼航空器',
-        model: draft.aircraftName.trim(),
-        sn: serial,
-        registrationMark: '',
-        registrationDate: '',
-        registrationStatus: '待关联',
-        owner: state.role === 'personal' ? '个人持有' : '企业持有',
-        group: '持有设备',
-        status: '待关联',
-        source: '手动录入',
-        certificate: '',
-        accountRole: state.role,
-        ownerCompany: state.role === 'company' ? data.profiles.company.name : (state.role === 'personal' ? '' : '')
-      };
-      normalizeDrone(drone);
-      data.drones.unshift(drone);
-      persistLedger();
-      syncDeviceCounts();
-      state.modal = null;
-      state.droneDraft = emptyDroneDraft();
-      announce('设备已保存，上传登记证后可自动关联绑定');
     }
     if (action === 'submit-modal') {
       const form = document.querySelector('#prototype-form'); if (form && !form.reportValidity()) return; state.modal = null; announce('提交成功');
@@ -1400,6 +1556,17 @@
       const label = target.textContent || state.droneGroup;
       announce(state.role === 'company' ? `已切换至${label}` : `已切换至${label}`);
     }
+    if (action === 'flight-exec-view') {
+      state.flightExecView = target.dataset.value || 'all';
+      announce(state.flightExecView === 'all' ? '已显示全部飞行计划' : `已筛选${state.flightExecView}计划`);
+    }
+    if (action === 'export-flights') {
+      if (state.role !== 'company') { announce('个人账号不支持导出飞行计划'); return; }
+      const rows = filteredFlights();
+      const result = downloadFlightExcel(rows);
+      announce(rows.length ? `已按当前筛选导出 ${result.count} 条飞行计划` : '当前筛选无数据，已导出空表');
+      return;
+    }
     if (action === 'article-kind') { state.articleKind = target.dataset.value; announce(`已筛选${target.textContent}`); }
     if (action === 'activity-filter') { state.mineActivities = !state.mineActivities; announce(state.mineActivities ? '已仅显示我的报名' : '已显示全部活动'); }
     if (action === 'open-my-activities') { state.mineActivities = true; go('activities'); }
@@ -1415,8 +1582,10 @@
     if (event.target.dataset?.feedbackField) state.feedbackDraft[event.target.dataset.feedbackField] = event.target.value;
     if (event.target.dataset?.memberField) state.memberDraft[event.target.dataset.memberField] = event.target.value;
     if (event.target.dataset?.flightField) state.flightDraft[event.target.dataset.flightField] = event.target.value;
-    if (event.target.dataset?.droneField) state.droneDraft[event.target.dataset.droneField] = event.target.value;
-    if (event.target.dataset?.supplementField) state.supplementDraft[event.target.dataset.supplementField] = event.target.value;
+    if (event.target.dataset?.supplementField) {
+      const field = event.target.dataset.supplementField;
+      state.supplementDraft[field] = event.target.value;
+    }
     if (event.target.dataset?.companyField) state.companyDraft[event.target.dataset.companyField] = event.target.value;
     if (event.target.id === 'search') { state.query = event.target.value; render(); const search = document.querySelector('#search'); if (search) { search.focus(); search.setSelectionRange(state.query.length, state.query.length); } }
     if (event.target.id === 'guide-search') { state.guideQuery = event.target.value; state.guidePage = 1; render(); const search = document.querySelector('#guide-search'); if (search) { search.focus(); search.setSelectionRange(state.guideQuery.length, state.guideQuery.length); } }
@@ -1424,6 +1593,10 @@
   });
   document.addEventListener('change', (event) => {
     if (event.target.dataset?.ocrField) { state.ocr.values[event.target.dataset.ocrField] = event.target.value; return; }
+    if (event.target.dataset?.supplementField) {
+      state.supplementDraft[event.target.dataset.supplementField] = event.target.value;
+      return;
+    }
     if (event.target.dataset?.companyField) { state.companyDraft[event.target.dataset.companyField] = event.target.value; return; }
     if (event.target.dataset?.memberField) { state.memberDraft[event.target.dataset.memberField] = event.target.value; return; }
     if (event.target.dataset?.assignField) { state.assignDraft[event.target.dataset.assignField] = event.target.value; return; }
@@ -1444,6 +1617,16 @@
       return;
     }
     if (event.target.dataset?.flightField) { state.flightDraft[event.target.dataset.flightField] = event.target.value; return; }
+    if (event.target.dataset?.flightRange !== undefined) {
+      const key = event.target.dataset.flightRange;
+      if (key === 'start') state.flightRangeStart = event.target.value || '';
+      if (key === 'end') state.flightRangeEnd = event.target.value || '';
+      if (state.flightRangeStart && state.flightRangeEnd && state.flightRangeStart > state.flightRangeEnd) {
+        announce('开始日期不能晚于结束日期');
+      }
+      render();
+      return;
+    }
     if (event.target.id === 'flight-approval-file') {
       const file = event.target.files?.[0];
       if (!file || !['image/png','image/jpeg'].includes(file.type)) { announce('请上传 JPG 或 PNG 格式的审批截图'); return; }
@@ -1453,10 +1636,37 @@
       render();
       setTimeout(() => {
         if (request !== state.flightShotRequest || state.modal !== 'flight') return;
-        state.flightDraft = { ...state.flightDraft, ...normalizeFlight({ ...data.flightApprovalOcr }) };
+        const filled = normalizeFlight({ ...data.flightApprovalOcr });
+        state.flightDraft = {
+          ...state.flightDraft,
+          title: filled.title,
+          activityType: filled.activityType,
+          missionNature: filled.missionNature,
+          controlMode: filled.controlMode,
+          flightMode: filled.flightMode,
+          startAt: filled.startAt,
+          endAt: filled.endAt,
+          city: filled.city,
+          street: filled.street,
+          purpose: filled.purpose,
+          drone: filled.drone,
+          operator: filled.operator,
+          operatorPhone: filled.operatorPhone,
+          maxAltitude: filled.maxAltitude,
+          takeoffSite: filled.takeoffSite
+        };
         state.flightShot = 'done';
         render();
       }, 700);
+      return;
+    }
+    if (event.target.id === 'flight-area-file') {
+      const file = event.target.files?.[0];
+      if (!file || !['image/png', 'image/jpeg'].includes(file.type)) { announce('请上传 JPG 或 PNG 格式的区域截图'); return; }
+      if (file.size > 10 * 1024 * 1024) { announce('截图超过 10 MB，请压缩后重新上传'); return; }
+      state.areaShot = 'done';
+      state.areaShotName = file.name || '飞行区域截图.jpg';
+      render();
       return;
     }
     if (event.target.id === 'batch-file') {

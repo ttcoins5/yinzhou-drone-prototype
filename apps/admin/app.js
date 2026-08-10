@@ -1,6 +1,22 @@
 (function () {
   const app = document.querySelector('#app');
   const data = window.LowAltitudeMock;
+  const normalizeConfigRows = (rows = [], prefix = 'CFG') => (rows || []).map((item, index) => ({
+    id: item.id || `${prefix}-${String(index + 1).padStart(2, '0')}`,
+    name: String(item.name || '').trim(),
+    sort: Number(item.sort) > 0 ? Number(item.sort) : index + 1,
+    state: item.state === '停用' ? '停用' : '启用',
+    updated: item.updated || data.now
+  })).filter((item) => item.name);
+  const syncFlightConfigLists = () => {
+    data.streetConfigs = normalizeConfigRows(data.streetConfigs || [], 'ST');
+    data.flightActivityTypes = normalizeConfigRows(data.flightActivityTypes || [], 'FAT');
+    data.districtConfigs = normalizeConfigRows(data.districtConfigs || [], 'DST');
+    const enabled = data.enabledConfigNames || ((rows) => (rows || []).filter((item) => (item.state || '启用') === '启用').map((item) => item.name));
+    data.yinzhouStreets = enabled(data.streetConfigs);
+    data.ningboDistricts = enabled(data.districtConfigs);
+  };
+  syncFlightConfigLists();
   const ledgerStorageKey = 'yinzhou-uom-ledger-v2';
   const profileStorageKey = 'yinzhou-profile-v2';
   const publicServiceStorageKey = 'yinzhou-public-service-v2';
@@ -156,6 +172,10 @@
       }
       if (Array.isArray(saved.messages)) data.messages = normalizeMessages(saved.messages);
       if (Array.isArray(saved.messageTemplates)) data.messageTemplates = normalizeMessageTemplates(saved.messageTemplates);
+      if (Array.isArray(saved.streetConfigs)) data.streetConfigs = saved.streetConfigs;
+      if (Array.isArray(saved.flightActivityTypes)) data.flightActivityTypes = saved.flightActivityTypes;
+      if (Array.isArray(saved.districtConfigs)) data.districtConfigs = saved.districtConfigs;
+      syncFlightConfigLists();
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
   const normalizeMessageTemplates = (templates) => templates.map((item) => ({
@@ -200,15 +220,19 @@
     return { ...feedback, fields, submitterType, submitterName };
   });
   const persistPublicService = () => {
-    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, messageTemplates: data.messageTemplates, uomGuide: data.uomGuide })); } catch {}
+    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, messageTemplates: data.messageTemplates, uomGuide: data.uomGuide, streetConfigs: data.streetConfigs, flightActivityTypes: data.flightActivityTypes, districtConfigs: data.districtConfigs })); } catch {}
   };
   hydrateProfile();
   hydrateLedger();
   hydratePublicService();
+  syncFlightConfigLists();
   data.messageTemplates = normalizeMessageTemplates(data.messageTemplates || []);
   data.messages = normalizeMessages(data.messages || []);
   const ledgers = {
     blacklist: [{id:'BL-001',name:'用户甲',type:'个人用户',reason:'治理记录',state:'已拉黑',operatedBy:'—',operatedAt:'—'},{id:'BL-002',name:'企业乙',type:'企业用户',reason:'核查中',state:'已拉黑',operatedBy:'—',operatedAt:'—'}],
+    droneBlacklist: [
+      { id: 'DBL-001', droneId: 'DR-003', aircraftName: '安巡 H20（演示）', registrationMark: 'UAS03****90', serialNumber: 'SN-****-4870', owner: '鄞州云航服务有限公司（演示）', reason: '违规飞行治理（演示）', state: '已拉黑', operatedBy: 'admin', operatedAt: '2026-07-20 14:20' }
+    ],
     volunteers: [
       { id: 'VOL-001', name: '张*', phone: '138****1001', volunteerType: '低空爱好者', area: '下应街道', source: '线下报名确认', confirmedAt: '2026-07-12', state: '在册', ridModule: 'RID-YZ-001', ridState: '已配发' },
       { id: 'VOL-002', name: '周*', phone: '139****2002', volunteerType: '社区网格员', area: '钟公庙街道', source: '线下报名确认', confirmedAt: '2026-07-18', state: '在册', ridModule: '—', ridState: '未配发' },
@@ -312,10 +336,21 @@
     return out;
   };
   const state = { modal: null, toast: '', query: '', filter: '全部', areaFilter: '全部', faqPage: 1, disabledDrones: new Set(), overrides: new Map(), userProfileDraft: {}, companyProfileDraft: {}, draft: {}, sidebarCollapsed: false, helpCollapsed: window.localStorage.getItem(helpStorageKey) === '1', expandedGroups: new Set(['工作台', '无人机后台管理']), tabs: [{ id: 'dashboard', label: '工作台', closable: false }], feedbackTab: 'content', lightTab: 'issue', dashboardPick: null, areaRange: 'week', areaCustomStart: '2026-07-29', areaCustomEnd: '2026-08-04', sysUserFilter: { userName: '', phone: '', status: '', start: '', end: '' }, sysUserSelected: '', roleFilter: { roleName: '', roleKey: '', status: '', start: '', end: '' }, roleSelected: '', menuFilter: { name: '', status: '' }, menuExpanded: false, dictFilter: { name: '', type: '', status: '' }, configFilter: { name: '', key: '', type: '' }, session: readAdminSession(), loginDraft: { account: 'admin', password: '', captcha: '' }, loginCaptcha: makeLoginCaptcha(), loginError: '', devicePickerQuery: '', devicePickerPage: 1 };
+  const syncDroneBlacklistState = () => {
+    const active = new Set((ledgers.droneBlacklist || []).filter((row) => row.state === '已拉黑').map((row) => row.droneId).filter(Boolean));
+    state.disabledDrones = active;
+    (data.drones || []).forEach((drone) => {
+      if (active.has(drone.id)) drone.manageState = '已禁用';
+      else if (drone.manageState === '已禁用') drone.manageState = '正常';
+      if (drone.status === '已禁用') drone.status = (drone.registrationStatus === '已注销' || drone.status === '已注销') ? '已注销' : '有效';
+    });
+  };
+  syncDroneBlacklistState();
+
   const groups = [
     ['工作台', [['dashboard','工作台']]],
     ['用户和企业管理', [['users','用户管理'],['companies','企业管理'],['blacklist','黑名单']]],
-    ['无人机后台管理', [['certificates','UOM 登记证'],['drones','无人机管理'],['verification','设备核查']]],
+    ['无人机后台管理', [['certificates','UOM 登记证'],['drones','无人机管理'],['drone-blacklist','无人机黑名单'],['verification','设备核查'],['streets','街道配置'],['districts','市区配置'],['flight-activity-types','飞行活动类型配置']]],
     ['飞行计划管理', [['flights','飞行计划']]],
     ['活动管理', [['activities','活动管理']]],
     ['宣传科普管理', [['laws','低空安全普法'],['news','新闻公告']]],
@@ -326,7 +361,7 @@
     ['系统管理', [['sys-users','用户管理'],['roles','角色管理'],['menus','菜单管理'],['dicts','字典管理']]]
   ];
   const meta = {
-    users:['用户管理','查看个人用户及其设备、UOM 登记证与飞行活动记录。',''],companies:['企业管理','查看企业账户、授权账号、设备及飞行活动记录。',''],blacklist:['黑名单','拉黑/取消拉黑用户、企业及其授权账号。','新增黑名单'],accounts:['用户管理','维护后台系统用户。','新增'],['sys-users']:['用户管理','维护后台系统用户账号、状态与角色分配。','新增'],roles:['角色管理','维护后台角色、权限字符与状态。','新增'],menus:['菜单管理','维护系统菜单目录、路由与按钮权限标识。','新增'],dicts:['字典管理','维护系统字典类型。','新增'],config:['参数设置','维护系统参数键名与键值。','新增'],['login-logs']:['登录日志','查看后台登录访问记录。','导出'],audit:['操作日志','查看数据访问、操作记录与审计检索。','导出日志'],certificates:['UOM 登记证','查看登记证载明的 11 项信息、更新记录及注销记录。','手动注销'],drones:['无人机管理','查看与 UOM 登记证一致的航空器基础字段及持有/使用分组。','新增核查'],verification:['设备核查','','新增核查'],flights:['飞行计划','管理报备信息、修改历史与执行确认记录。','导出计划'],activities:['活动管理','新建、编辑、下架和删除活动；详情页直接展示报名名单并可一键确认，确认后用户端不可报名。','新建活动'],enrollments:['活动报名','查看报名填写内容；一键确认请在活动详情本场报名名单中完成。','导出报名'],laws:['低空安全普法','新建、编辑、下架、删除政策法规，含发布单位、生效起止、排序与封面（图片/视频）。','新建普法'],news:['新闻公告','新建、编辑、下架新闻公告；含排序，封面可上传图片或视频。','新建公告'],guides:['操作手册','维护流程标题、摘要、编号排序与图文说明；可新建、编辑、上架/下架与删除。','新建流程'],faq:['常见问题','维护用户端 FAQ 问题、排序与图文解答；可新建、编辑、下架与删除。','新建问题'],volunteers:['志愿者名册','维护线下确认后的低空爱好者与社区网格员名册，支持按姓名、区域查询与移除。','添加志愿者'],['rid-modules']:['RID模块','维护 RID 模块台账，支持新增入库、配发绑定与回收。','新增RID'],messages:['消息模板','查看系统按业务场景自动触达的消息模板；不支持人工新建与主动推送。',''],feedback:['意见反馈','收集用户反馈内容，维护用户端反馈表单与多图上传字段。','新建表单'],['shoulder-lights']:['肩灯配发','','新增肩带'],alerts:['侦测预警','接收肩灯感知数据并与飞行计划比对，对未报备飞行生成预警与证据包。','处置告警'],interface:['外部接口','对接市级低空平台、智巡车防与肩灯厂商侦测平台。','同步数据']
+    users:['用户管理','查看个人用户及其设备、UOM 登记证与飞行活动记录。',''],companies:['企业管理','查看企业账户、授权账号、设备及飞行活动记录。',''],blacklist:['黑名单','拉黑/取消拉黑用户、企业及其授权账号。','新增黑名单'],accounts:['用户管理','维护后台系统用户。','新增'],['sys-users']:['用户管理','维护后台系统用户账号、状态与角色分配。','新增'],roles:['角色管理','维护后台角色、权限字符与状态。','新增'],menus:['菜单管理','维护系统菜单目录、路由与按钮权限标识。','新增'],dicts:['字典管理','维护系统字典类型。','新增'],config:['参数设置','维护系统参数键名与键值。','新增'],['login-logs']:['登录日志','查看后台登录访问记录。','导出'],audit:['操作日志','查看数据访问、操作记录与审计检索。','导出日志'],certificates:['UOM 登记证','查看登记证载明的 11 项信息、更新记录及注销记录。','手动注销'],drones:['无人机管理','查看与 UOM 登记证一致的航空器基础字段及持有/使用分组。','新增核查'],['drone-blacklist']:['无人机黑名单','',''],verification:['设备核查','','新增核查'],streets:['街道配置','','新增街道'],districts:['市区配置','','新增市区'],['flight-activity-types']:['飞行活动类型配置','','新增类型'],flights:['飞行计划','管理报备信息、修改历史与执行确认记录。','导出计划'],activities:['活动管理','新建、编辑、下架和删除活动；详情页直接展示报名名单并可一键确认，确认后用户端不可报名。','新建活动'],enrollments:['活动报名','查看报名填写内容；一键确认请在活动详情本场报名名单中完成。','导出报名'],laws:['低空安全普法','新建、编辑、下架、删除政策法规，含发布单位、生效起止、排序与封面（图片/视频）。','新建普法'],news:['新闻公告','新建、编辑、下架新闻公告；含排序，封面可上传图片或视频。','新建公告'],guides:['操作手册','维护流程标题、摘要、编号排序与图文说明；可新建、编辑、上架/下架与删除。','新建流程'],faq:['常见问题','维护用户端 FAQ 问题、排序与图文解答；可新建、编辑、下架与删除。','新建问题'],volunteers:['志愿者名册','维护线下确认后的低空爱好者与社区网格员名册，支持按姓名、区域查询与移除。','添加志愿者'],['rid-modules']:['RID模块','维护 RID 模块台账，支持新增入库、配发绑定与回收。','新增RID'],messages:['消息模板','查看系统按业务场景自动触达的消息模板；不支持人工新建与主动推送。',''],feedback:['意见反馈','收集用户反馈内容，维护用户端反馈表单与多图上传字段。','新建表单'],['shoulder-lights']:['肩灯配发','','新增肩带'],alerts:['侦测预警','接收肩灯感知数据并与飞行计划比对，对未报备飞行生成预警与证据包。','处置告警'],interface:['外部接口','对接市级低空平台、智巡车防与肩灯厂商侦测平台。','同步数据']
   };
   const route = () => (location.hash || (state.session ? '#/dashboard' : '#/login')).replace('#/','').split('?')[0];
   const routeLabel = (value = route()) => {
@@ -407,6 +442,10 @@
     ['login-logs']:'M8 4h8l3 3v13H8zM11 11h5M11 15h4M12 8h.01',
     certificates:'M7 3h8l3 3v15H7zM10 11h5M10 15h5',
     drones:'M12 3v4M8 7h8M7 12h10M9 12l-3 6M15 12l3 6M12 11v7',
+    ['drone-blacklist']:'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16M8 8l8 8',
+    streets:'M4 10h16M6 6h12v12H6zM9 14h6',
+    districts:'M4 7h16v10H4zM8 7V5h8v2M9 12h6',
+    ['flight-activity-types']:'M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7zM9 12h6',
     verification:'M8 4h8l3 3v13H8zM10 13l2 2 4-4',
     flights:'M4 12h14M14 6l6 6-6 6',
     activities:'M7 4h10v16H7zM10 8h4M10 12h4M10 16h3',
@@ -531,6 +570,7 @@
     if (common[key]) return common[key];
     const generated = {
       blacklist: ledgers.blacklist,
+      ['drone-blacklist']: (ledgers.droneBlacklist || []).filter((row) => (row.state || '已拉黑') === '已拉黑'),
       accounts: ledgers.accounts,
       accountUsers:[{id:'ACC-PERSONAL',name:data.profiles.personal.name,type:data.profiles.personal.label || '个人用户',scope:'个人资料、飞行执照、登记证、无人机、飞行计划、活动与反馈',state:'正常'},{id:'ACC-COMPANY',name:data.profiles.company.name,type:data.profiles.company.label || '企业用户',scope:'企业资料、关联用户、我的飞手、登记证、无人机、飞行申报与反馈',state:data.profiles.company.verified === '已认证' ? '正常' : '待认证'}],
       audit:[{id:'LOG-001',name:'台账查询',operator:'管理员',time:'2026-07-30 09:16',state:'已记录'},{id:'LOG-002',name:'飞行计划核查',operator:'核查员',time:'2026-07-30 08:52',state:'已记录'}],
@@ -573,6 +613,7 @@
       volunteers: ['name', 'phone', 'volunteerType', 'area', 'state'],
       ['rid-modules']: ['id', 'sn', 'model', 'state', 'volunteerName', 'area', 'updatedAt'],
       blacklist: ['name', 'type', 'reason', 'operatedBy', 'operatedAt', 'state'],
+      ['drone-blacklist']: ['aircraftName', 'registrationMark', 'serialNumber', 'owner', 'reason', 'operatedBy', 'operatedAt'],
       verification: ['id', 'aircraftName', 'serialNumber', 'registrationMark', 'ownerType', 'checkType', 'result', 'checkDate', 'operator'],
       laws: ['title', 'source', 'effectiveDate', 'sort', 'status', 'date'],
       news: ['title', 'sort', 'status', 'date'],
@@ -584,12 +625,17 @@
     }[key];
     return preferred || Object.keys(rows[0] || {}).filter((x) => x !== 'id' && typeof (rows[0] || {})[x] !== 'object').slice(0, 5);
   };
-  const label = (key) => ({id:'编号',name:'姓名',type:'账号身份',idNumber:'身份证号',phone:'手机号码',address:'地址',license:'飞行执照图片',licenseFileName:'执照文件名',drones:'设备数',contact:'授权人',accounts:'账号数',drone:'飞行设备',registrationMark:'登记标志',manufacturerModel:'航空器型号和制造人',serialNumber:'序号',aircraftName:'产品名称',emptyWeight:'空机重量',maxTakeoffWeight:'最大起飞重量',aircraftType:'类型',issuedTo:'本证发给',mobilePhone:'联系手机',registrationStatus:'登记状态',registrationDate:'注册日期',state:'状态',updated:'更新时间',model:'设备型号',sn:'设备序列号',updatedAt:'更新时间',owner:'归属',group:'设备分组',manageState:'管理状态',title:'计划名称',time:'计划时间',area:'飞行区域',status:'发布状态',pinned:'置顶',sort:'排序',executed:'执行状态',place:'地点',operator:'通信联络人',operatorPhone:'通信联络电话',activityType:'飞行活动类型',missionNature:'任务性质',controlMode:'操控模式',flightMode:'飞行模式',startAt:'预计开始时间',endAt:'预计结束时间',maxAltitude:'最大飞行高度',takeoffSite:'起降备降场地',purpose:'任务性质',approval:'审批材料',role:'角色',scope:'服务范围',reason:'原因',applicant:'报名人',source:'来源',category:'类别',rule:'规则',holder:'持有人',activities:'参与活动',zone:'管控区域',kind:'内容类型',mediaType:'图文/视频',coverImage:'封面',duration:'时长',date:'日期',views:'阅读量',unit:'领用单位',issuedAt:'配发时间',returnedAt:'回收时间',device:'设备编号',detail:'说明',summary:'摘要',question:'问题',answer:'富文本解答',startTime:'开始时间',endTime:'结束时间',enrollStart:'报名开始',enrollEnd:'报名截止',enrolled:'已报名',capacity:'名额',enrolledQuota:'已报名/名额',confirmState:'报名确认状态',organizer:'主办单位',operatedBy:'操作人',operatedAt:'操作时间',scene:'适用场景',channel:'消息类型',content:'消息内容',bound:'统一账号绑定',ridModule:'RID 模块编号',ridState:'RID 配发状态',volunteerType:'志愿者类型',volunteerName:'关联志愿者',confirmedAt:'线下确认日期',effectiveDate:'生效起止',sort:'排序',ownerType:'权属',checkType:'核查类型',checkMethod:'核查方式',checkPlace:'核查地点',result:'核查结果',issueDesc:'问题描述',suggestion:'处理意见',followUpDate:'计划跟进日期',checkDate:'核查日期',droneId:'关联设备'})[key] || key;
-  const flightAreaText = (item) => item.area || [item.city || '宁波市鄞州区', item.street].filter(Boolean).join('') || '—';
+  const label = (key) => ({id:'编号',name:'姓名',type:'账号身份',idNumber:'身份证号',phone:'手机号码',address:'地址',license:'飞行执照图片',licenseFileName:'执照文件名',drones:'设备数',contact:'授权人',accounts:'账号数',drone:'飞行设备',registrationMark:'登记标志',manufacturerModel:'航空器型号和制造人',serialNumber:'序号',aircraftName:'产品名称',emptyWeight:'空机重量',maxTakeoffWeight:'最大起飞重量',aircraftType:'类型',issuedTo:'本证发给',mobilePhone:'联系手机',registrationStatus:'登记状态',registrationDate:'注册日期',state:'状态',updated:'更新时间',model:'设备型号',sn:'设备序列号',updatedAt:'更新时间',owner:'归属',group:'设备分组',manageState:'管理状态',title:'计划名称',time:'计划时间',area:'飞行区域',status:'发布状态',pinned:'置顶',sort:'排序',executed:'执行状态',place:'地点',operator:'通信联络人',operatorPhone:'通信联络电话',activityType:'飞行活动类型',missionNature:'任务性质',controlMode:'操控模式',flightMode:'飞行模式',startAt:'预计开始时间',endAt:'预计结束时间',maxAltitude:'最大飞行高度',takeoffSite:'起飞地',purpose:'任务性质',approval:'审批材料',role:'角色',scope:'服务范围',reason:'原因',applicant:'报名人',source:'来源',category:'类别',rule:'规则',holder:'持有人',activities:'参与活动',zone:'管控区域',kind:'内容类型',mediaType:'图文/视频',coverImage:'封面',duration:'时长',date:'日期',views:'阅读量',unit:'领用单位',issuedAt:'配发时间',returnedAt:'回收时间',device:'设备编号',detail:'说明',summary:'摘要',question:'问题',answer:'富文本解答',startTime:'开始时间',endTime:'结束时间',enrollStart:'报名开始',enrollEnd:'报名截止',enrolled:'已报名',capacity:'名额',enrolledQuota:'已报名/名额',confirmState:'报名确认状态',organizer:'主办单位',operatedBy:'操作人',operatedAt:'操作时间',scene:'适用场景',channel:'消息类型',content:'消息内容',bound:'统一账号绑定',ridModule:'RID 模块编号',ridState:'RID 配发状态',volunteerType:'志愿者类型',volunteerName:'关联志愿者',confirmedAt:'线下确认日期',effectiveDate:'生效起止',sort:'排序',ownerType:'权属',checkType:'核查类型',checkMethod:'核查方式',checkPlace:'核查地点',result:'核查结果',issueDesc:'问题描述',suggestion:'处理意见',followUpDate:'计划跟进日期',checkDate:'核查日期',droneId:'关联设备'})[key] || key;
+  const flightAreaText = (item) => {
+    const text = item.area || [item.city || '宁波市鄞州区', item.street].filter(Boolean).join('') || '—';
+    return item.areaShot ? `${text}（已上传区域截图）` : text;
+  };
   const flightTimeText = (item) => item.time || (item.startAt && item.endAt ? `${item.startAt.replace('T', ' ')}—${item.endAt.replace('T', ' ').slice(11)}` : '—');
   const droneRegistrationState = (item) => (item.state === '已注销' || data.uomValue(item, 'registrationStatus') === '已注销') ? '已注销' : '有效';
-  const statusValue = (key, item) => state.overrides.get(`${key}:${item.id}`) || (key === 'drones' && state.disabledDrones.has(item.id) ? '已禁用' : key === 'flights' ? (item.executed || '—') : key === 'enrollments' ? (item.state || '—') : key === 'messages' ? (item.state || '已启用') : key === 'verification' ? (item.result || item.state || '—') : item.status || item.state || item.executed || '—');
+  const statusValue = (key, item) => state.overrides.get(`${key}:${item.id}`) || (key === 'drones' && (state.disabledDrones.has(item.id) || item.manageState === '已禁用') ? '已禁用' : key === 'flights' ? (item.executed || '—') : key === 'enrollments' ? (item.state || '—') : key === 'messages' ? (item.state || '已启用') : key === 'verification' ? (item.result || item.state || '—') : item.status || item.state || item.executed || '—');
   const columnLabel = (key, column) => {
+    if (key === 'drone-blacklist' && column === 'serialNumber') return '设备序列号';
+    if (key === 'drone-blacklist' && column === 'reason') return '拉黑原因';
     if (key === 'messages') return ({ id: '模板编号', name: '模板名称', scene: '业务场景', trigger: '触发条件', channel: '触达渠道', title: '消息标题', content: '消息内容', variables: '变量说明', state: '启用状态', updated: '更新时间' })[column] || label(column);
     if (key === 'companies' && column === 'name') return '企业名称';
     if (key === 'companies' && column === 'status') return '状态';
@@ -618,7 +664,7 @@
     if (key === 'flights' && column === 'missionNature') return safe(item.missionNature || item.purpose || '—');
     if (key === 'flights' && column === 'executed') return status(item.executed || '—');
     if (key === 'drones' && column === 'registrationStatus') return status(droneRegistrationState(item));
-    if (key === 'drones' && column === 'manageState') return status(state.disabledDrones.has(item.id) || item.status === '已禁用' ? '已禁用' : '正常');
+    if (key === 'drones' && column === 'manageState') return status(state.disabledDrones.has(item.id) || item.manageState === '已禁用' ? '已禁用' : '正常');
     if (key === 'activities' && column === 'enrolledQuota') return `${safe(item.enrolled ?? 0)} / ${safe(item.capacity ?? 0)}`;
     if (key === 'activities' && column === 'confirmState') return status(activityConfirmState(item));
     if (key === 'enrollments' && column === 'state') return status(item.state || '—');
@@ -642,15 +688,16 @@
     }
     return ['status','state','executed','license'].includes(column) ? status(column === 'license' ? raw : statusValue(key, item)) : safe(raw);
   };
-  const operationLabel = (key) => ({users:'拉黑',companies:'拉黑',blacklist:'取消拉黑',accounts:'配置权限',audit:'查看审计',certificates:'手动注销',drones:'禁用设备',verification:'完成核查',flights:'查看执行',activities:'下架活动',enrollments:'确认报名',laws:'下架内容',news:'下架内容',guides:'下架',faq:'下架问题',volunteers:'移除志愿者',['rid-modules']:'回收模块',messages:'启用模板',['shoulder-lights']:'归还肩灯',alerts:'记录处置',interface:'同步数据'})[key] || '变更状态';
-  const operationResult = (key) => ({users:'已拉黑',companies:'已拉黑',blacklist:'已取消拉黑',accounts:'已调整',audit:'已查阅',certificates:'已注销',drones:'已禁用',verification:'已完成',flights:'已查看',activities:'已下架',enrollments:'已确认',laws:'已下架',news:'已下架',guides:'已下架',faq:'已下架',volunteers:'已移除',['rid-modules']:'已回收',messages:'已更新',['shoulder-lights']:'已归还',alerts:'已处置',interface:'已同步'})[key] || '已更新';
+  const operationLabel = (key) => ({users:'拉黑',companies:'拉黑',blacklist:'取消拉黑',['drone-blacklist']:'取消拉黑',accounts:'配置权限',audit:'查看审计',certificates:'手动注销',drones:'禁用设备',verification:'完成核查',flights:'查看执行',activities:'下架活动',enrollments:'确认报名',laws:'下架内容',news:'下架内容',guides:'下架',faq:'下架问题',volunteers:'移除志愿者',['rid-modules']:'回收模块',messages:'启用模板',['shoulder-lights']:'归还肩灯',alerts:'记录处置',interface:'同步数据'})[key] || '变更状态';
+  const operationResult = (key) => ({users:'已拉黑',companies:'已拉黑',blacklist:'已取消拉黑',['drone-blacklist']:'已取消拉黑',accounts:'已调整',audit:'已查阅',certificates:'已注销',drones:'已禁用',verification:'已完成',flights:'已查看',activities:'已下架',enrollments:'已确认',laws:'已下架',news:'已下架',guides:'已下架',faq:'已下架',volunteers:'已移除',['rid-modules']:'已回收',messages:'已更新',['shoulder-lights']:'已归还',alerts:'已处置',interface:'已同步'})[key] || '已更新';
   const table = (key, rows = rowsFor(key)) => {
     const cols = columnsFor(key, rows); const visible = rows.filter((row) => (!state.query || Object.values(row).filter((v) => typeof v !== 'object').join(' ').toLowerCase().includes(state.query.toLowerCase())) && (state.filter === '全部' || statusValue(key, row).includes(state.filter)));
-    return visible.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>${cols.map((x) => `<th>${columnLabel(key, x)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr>${cols.map((col) => `<td>${value(col,item,key)}</td>`).join('')}<td><div class="actions"><button class="text-btn" data-action="detail" data-key="${key}" data-id="${safe(item.id)}">详情</button>${(window.AdminUI?.NO_EDIT?.has(key) || ['certificates','drones','feedback','accounts','flights','enrollments','audit','alerts','interface','messages'].includes(key)) ? '' : `<button class="text-btn" data-go="form/${key}/${safe(item.id)}">编辑</button>`}${key === 'accounts' ? `<button class="text-btn" data-action="modal" data-modal="permission" data-key="accounts" data-item="${safe(item.id)}">配置权限</button>` : ''}${['laws','news'].includes(key) ? `<button class="text-btn warning" data-action="toggle-content-status" data-id="${safe(item.id)}">${item.status === '已发布' ? '下架' : '发布'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="${key}" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'activities' ? `<button class="text-btn" data-go="detail/activities/${safe(item.id)}">查看报名名单</button><button class="text-btn warning" data-action="request-change" data-key="activities" data-id="${safe(item.id)}">下架活动</button><button class="text-btn danger" data-action="request-delete-content" data-key="activities" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'drones' && droneRegistrationState(item) !== '已注销' ? `<button class="text-btn danger" data-action="cancel-drone" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'certificates' && item.state !== '已注销' ? `<button class="text-btn danger" data-action="request-change" data-key="certificates" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'users' || key === 'companies' || key === 'blacklist' || key === 'volunteers' ? `<button class="text-btn danger" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>` : ''}${key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="text-btn warning" data-action="request-change" data-key="drones" data-id="${safe(item.id)}">禁用设备</button>` : ''}${key === 'verification' ? (item.result === '待核查' ? `<button class="text-btn" data-action="request-change" data-key="verification" data-id="${safe(item.id)}">完成核查</button>` : '') : key === 'messages' ? `<button class="text-btn ${item.state === '已启用' ? 'warning' : ''}" data-action="toggle-message-template" data-id="${safe(item.id)}">${item.state === '已启用' ? '停用' : '启用'}</button>` : (['feedback','laws','news','activities','accounts','certificates','drones','users','companies','blacklist','volunteers','flights','enrollments','audit','alerts','interface'].includes(key) ? '' : `<button class="text-btn" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>`)}</div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的数据</div>';
+    return visible.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>${cols.map((x) => `<th>${columnLabel(key, x)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr>${cols.map((col) => `<td>${value(col,item,key)}</td>`).join('')}<td><div class="actions"><button class="text-btn" data-action="detail" data-key="${key}" data-id="${safe(item.id)}">详情</button>${(window.AdminUI?.NO_EDIT?.has(key) || ['certificates','drones','drone-blacklist','feedback','accounts','flights','enrollments','audit','alerts','interface','messages'].includes(key)) ? '' : `<button class="text-btn" data-go="form/${key}/${safe(item.id)}">编辑</button>`}${key === 'accounts' ? `<button class="text-btn" data-action="modal" data-modal="permission" data-key="accounts" data-item="${safe(item.id)}">配置权限</button>` : ''}${['laws','news'].includes(key) ? `<button class="text-btn warning" data-action="toggle-content-status" data-id="${safe(item.id)}">${item.status === '已发布' ? '下架' : '发布'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="${key}" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'activities' ? `<button class="text-btn" data-go="detail/activities/${safe(item.id)}">查看报名名单</button><button class="text-btn warning" data-action="request-change" data-key="activities" data-id="${safe(item.id)}">下架活动</button><button class="text-btn danger" data-action="request-delete-content" data-key="activities" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'drones' && droneRegistrationState(item) !== '已注销' ? `<button class="text-btn danger" data-action="cancel-drone" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'certificates' && item.state !== '已注销' ? `<button class="text-btn danger" data-action="request-change" data-key="certificates" data-id="${safe(item.id)}">手动注销</button>` : ''}${(key === 'users' || key === 'companies' || key === 'blacklist' || key === 'volunteers' || key === 'drone-blacklist') ? `<button class="text-btn danger" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>` : ''}${key === 'drones' && !(state.disabledDrones.has(item.id) || item.manageState === '已禁用') ? `<button class="text-btn warning" data-action="request-change" data-key="drones" data-id="${safe(item.id)}">禁用设备</button>` : ''}${key === 'verification' ? (item.result === '待核查' ? `<button class="text-btn" data-action="request-change" data-key="verification" data-id="${safe(item.id)}">完成核查</button>` : '') : key === 'messages' ? `<button class="text-btn ${item.state === '已启用' ? 'warning' : ''}" data-action="toggle-message-template" data-id="${safe(item.id)}">${item.state === '已启用' ? '停用' : '启用'}</button>` : (['feedback','laws','news','activities','accounts','certificates','drones','drone-blacklist','users','companies','blacklist','volunteers','flights','enrollments','audit','alerts','interface'].includes(key) ? '' : `<button class="text-btn" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>`)}</div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的数据</div>';
   };
   const filterBar = (key) => {
     if (key === 'feedback') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索反馈编号、提交人、表单类型或填写内容" aria-label="搜索反馈提交记录" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    const options = key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'messages' ? ['全部','已启用','已停用'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
+    const options = key === 'drone-blacklist' ? null : key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'messages' ? ['全部','已启用','已停用'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
+    if (key === 'drone-blacklist') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索产品名称、登记标志、序列号或拉黑原因" aria-label="搜索无人机黑名单" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
     if (key === 'faq') return `<div class="filter-bar faq-filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索问题关键词" aria-label="搜索常见问题" /><select id="state-filter" aria-label="发布状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
     if (key === 'verification') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索核查编号、设备名称、设备序列号或登记标志" aria-label="搜索设备核查" /><select id="state-filter" aria-label="核查结果筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
     if (key === 'messages') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索模板编号、名称、业务场景或触发条件" aria-label="搜索消息模板" /><select id="state-filter" aria-label="启用状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
@@ -739,40 +786,7 @@
   };
   const metric = (name, number, note) => `<article class="metric-card"><span>${name}</span><strong>${number}</strong><small>${note}</small></article>`;
   const dashboardMetric = (name, number, note, go) => `<button type="button" class="metric-card is-interactive" data-go="${go}"><span>${name}</span><strong>${number}</strong><small>${note}</small></button>`;
-  const areaDistributionSets = {
-    week: [
-      { name: '钟公庙街道', count: 36, pct: 86 },
-      { name: '首南街道', count: 28, pct: 67 },
-      { name: '东钱湖镇', count: 22, pct: 52 },
-      { name: '姜山镇', count: 18, pct: 43 },
-      { name: '潘火街道', count: 14, pct: 33 },
-      { name: '下应街道', count: 10, pct: 24 }
-    ],
-    month: [
-      { name: '钟公庙街道', count: 142, pct: 92 },
-      { name: '首南街道', count: 118, pct: 76 },
-      { name: '东钱湖镇', count: 96, pct: 62 },
-      { name: '姜山镇', count: 81, pct: 52 },
-      { name: '潘火街道', count: 64, pct: 41 },
-      { name: '下应街道', count: 48, pct: 31 }
-    ],
-    year: [
-      { name: '钟公庙街道', count: 1680, pct: 94 },
-      { name: '首南街道', count: 1412, pct: 79 },
-      { name: '东钱湖镇', count: 1186, pct: 66 },
-      { name: '姜山镇', count: 972, pct: 54 },
-      { name: '潘火街道', count: 784, pct: 44 },
-      { name: '下应街道', count: 610, pct: 34 }
-    ],
-    custom: [
-      { name: '钟公庙街道', count: 58, pct: 80 },
-      { name: '首南街道', count: 46, pct: 64 },
-      { name: '东钱湖镇', count: 39, pct: 54 },
-      { name: '姜山镇', count: 31, pct: 43 },
-      { name: '潘火街道', count: 24, pct: 33 },
-      { name: '下应街道', count: 17, pct: 24 }
-    ]
-  };
+  const dashboardAnchorDate = '2026-08-10';
   const areaRangeOptions = [
     { id: 'week', label: '近一周' },
     { id: 'month', label: '一月' },
@@ -783,48 +797,106 @@
     if (state.areaRange === 'custom') return `${state.areaCustomStart || '—'} 至 ${state.areaCustomEnd || '—'}`;
     return areaRangeOptions.find((item) => item.id === state.areaRange)?.label || '近一周';
   };
-  const currentAreaDistribution = () => areaDistributionSets[state.areaRange] || areaDistributionSets.week;
+  const shiftDate = (iso, days) => {
+    const date = new Date(`${iso}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const flightPlanDay = (flight) => {
+    const raw = String(flight?.startAt || flight?.time || '').trim();
+    const match = raw.match(/(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
+  };
+  const dashboardRangeBounds = () => {
+    if (state.areaRange === 'custom') {
+      return { start: state.areaCustomStart || '', end: state.areaCustomEnd || '' };
+    }
+    if (state.areaRange === 'month') return { start: shiftDate(dashboardAnchorDate, -29), end: dashboardAnchorDate };
+    if (state.areaRange === 'year') return { start: shiftDate(dashboardAnchorDate, -364), end: dashboardAnchorDate };
+    return { start: shiftDate(dashboardAnchorDate, -6), end: dashboardAnchorDate };
+  };
+  const flightsInDashboardRange = () => {
+    const { start, end } = dashboardRangeBounds();
+    return (data.flights || []).filter((flight) => {
+      const day = flightPlanDay(flight);
+      if (!day) return false;
+      if (start && day < start) return false;
+      if (end && day > end) return false;
+      return true;
+    });
+  };
+  const normalizeTakeoffSite = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw || raw === '—') return '';
+    const streets = data.yinzhouStreets || [];
+    const hit = streets.find((street) => raw === street || raw.includes(street));
+    return hit || raw;
+  };
+  const distRowsFromCounts = (counts) => {
+    const entries = Object.entries(counts).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'zh'));
+    const max = Math.max(...entries.map(([, count]) => count), 1);
+    return entries.map(([name, count]) => ({ name, count, pct: Math.max(8, Math.round((count / max) * 100)) }));
+  };
+  const takeoffDistributionRows = () => {
+    const counts = {};
+    flightsInDashboardRange().forEach((flight) => {
+      const site = normalizeTakeoffSite(flight.takeoffSite);
+      if (!site) return;
+      counts[site] = (counts[site] || 0) + 1;
+    });
+    return distRowsFromCounts(counts);
+  };
+  const activityTypeDistributionRows = () => {
+    const counts = {};
+    flightsInDashboardRange().forEach((flight) => {
+      const type = String(flight.activityType || '').trim() || '未填写';
+      counts[type] = (counts[type] || 0) + 1;
+    });
+    return distRowsFromCounts(counts);
+  };
+  const flightSortieStats = () => {
+    const rows = flightsInDashboardRange();
+    const total = rows.length;
+    const done = rows.filter((flight) => flight.executed === '已确认执行').length;
+    const pending = rows.filter((flight) => flight.executed !== '已确认执行').length;
+    return [
+      { name: '报备架次', value: String(total), tone: 'filled', caption: `当前统计时间段内飞行计划数` },
+      { name: '已执行架次', value: String(done), tone: 'filled', caption: total ? `占报备 ${Math.round((done / total) * 100)}%` : '暂无报备' },
+      { name: '未执行架次', value: String(pending), tone: 'pending', caption: total ? `占报备 ${Math.round((pending / total) * 100)}%` : '暂无报备' }
+    ];
+  };
   const licenseStats = [
     { name: '已上传执照', value: '864', tone: 'filled' },
     { name: '未上传执照', value: '96', tone: 'pending' }
   ];
-  const flightTrendSeries = [
-    { label: '07-29', value: 12 },
-    { label: '07-30', value: 18 },
-    { label: '07-31', value: 14 },
-    { label: '08-01', value: 22 },
-    { label: '08-02', value: 16 },
-    { label: '08-03', value: 28 },
-    { label: '08-04', value: 21 }
-  ];
-  const flightTrendChart = (series) => {
-    const width = 640;
-    const height = 220;
-    const padX = 36;
-    const padY = 24;
-    const max = Math.max(...series.map((item) => item.value), 1);
-    const step = series.length > 1 ? (width - padX * 2) / (series.length - 1) : 0;
-    const points = series.map((item, index) => {
-      const x = padX + step * index;
-      const y = height - padY - ((item.value / max) * (height - padY * 2));
-      return { ...item, x, y };
-    });
-    const line = points.map((point) => `${point.x},${point.y}`).join(' ');
-    const area = `${padX},${height - padY} ${line} ${points[points.length - 1].x},${height - padY}`;
-    const active = state.dashboardPick?.kind === 'trend' ? state.dashboardPick.id : '';
-    return `<div class="line-chart" role="img" aria-label="近 7 日飞行计划折线图"><div class="line-chart-plot"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="flight-trend-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1769b0" stop-opacity=".22"/><stop offset="100%" stop-color="#1769b0" stop-opacity="0"/></linearGradient></defs><polyline class="line-chart-grid" points="${padX},${height - padY} ${width - padX},${height - padY}" /><polyline class="line-chart-area" points="${area}" /><polyline class="line-chart-line" points="${line}" />${points.map((point) => `<g class="line-chart-point ${active === point.label ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="trend" data-id="${safe(point.label)}" data-value="${point.value}" data-label="${safe(point.label)}"><circle class="line-chart-hit" cx="${point.x}" cy="${point.y}" r="14" /><circle class="line-chart-dot" cx="${point.x}" cy="${point.y}" r="4" /></g>`).join('')}</svg><div class="line-chart-values" aria-hidden="true">${points.map((point) => `<span class="${active === point.label ? 'is-active' : ''}" style="left:${((point.x / width) * 100).toFixed(2)}%;top:${((point.y / height) * 100).toFixed(2)}%">${point.value}</span>`).join('')}</div></div><div class="line-chart-labels">${points.map((point) => `<span class="${active === point.label ? 'is-active' : ''}">${safe(point.label)}</span>`).join('')}</div></div>`;
-  };
   const areaRangeFilter = () => {
     const chips = areaRangeOptions.map((item) => `<button type="button" class="range-chip ${state.areaRange === item.id ? 'is-active' : ''}" data-action="dashboard-area-range" data-range="${item.id}">${item.label}</button>`).join('');
     const custom = state.areaRange === 'custom'
       ? `<div class="range-custom"><label>开始日期<input type="date" data-area-date="start" value="${safe(state.areaCustomStart)}" aria-label="自选开始日期" /></label><label>结束日期<input type="date" data-area-date="end" value="${safe(state.areaCustomEnd)}" aria-label="自选结束日期" /></label></div>`
       : '';
-    return `<div class="range-filter" aria-label="飞行区域分布时间段筛选"><div class="range-chips">${chips}</div>${custom}</div>`;
+    return `<div class="range-filter range-filter--board" aria-label="飞行报备统计时间段筛选"><div class="range-chips">${chips}</div>${custom}</div>`;
   };
-  const areaDistributionPanel = () => {
-    const rows = currentAreaDistribution();
-    const active = state.dashboardPick?.kind === 'area' ? state.dashboardPick.id : '';
-    return `<div class="dist-list">${rows.map((item) => `<button type="button" class="dist-row is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="area" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div><b>${item.count}</b></button>`).join('')}</div><p class="range-hint">当前统计时间段：${safe(areaRangeLabel())}</p>`;
+  const dashboardFlightToolbar = () => `<div class="dashboard-flight-toolbar"><p class="range-hint">当前统计时间段：<b>${safe(areaRangeLabel())}</b></p><div data-dashboard-area-filter>${areaRangeFilter()}</div></div>`;
+  const distListPanel = (rows, kind, emptyText) => {
+    const active = state.dashboardPick?.kind === kind ? state.dashboardPick.id : '';
+    if (!rows.length) return `<div class="empty">${safe(emptyText)}</div>`;
+    return `<div class="dist-list">${rows.map((item) => `<button type="button" class="dist-row is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="${kind}" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div><b>${item.count}</b></button>`).join('')}</div>`;
+  };
+  const areaDistributionPanel = () => distListPanel(takeoffDistributionRows(), 'area', '所选时间段暂无起飞地报备数据');
+  const activityTypeStatsPanel = () => distListPanel(activityTypeDistributionRows(), 'activity-type', '所选时间段暂无飞行活动类型数据');
+  const flightSortieStatsPanel = () => {
+    const active = state.dashboardPick?.kind === 'sortie' ? state.dashboardPick.id : '';
+    const details = flightSortieStats();
+    const total = Number(details[0]?.value || 0) || 0;
+    const cards = details.map((item) => {
+      const value = Number(item.value || 0) || 0;
+      const pct = item.name === '报备架次' ? (total ? 100 : 0) : (total ? Math.round((value / total) * 100) : 0);
+      return `<button type="button" class="sortie-card is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="sortie" data-id="${safe(item.name)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><i class="sortie-bar" aria-hidden="true"><b style="width:${pct}%"></b></i><em>${safe(item.caption)}</em></button>`;
+    }).join('');
+    return `<div class="sortie-grid">${cards}</div>`;
   };
   const licenseStatsPanel = () => {
     const active = state.dashboardPick?.kind === 'license' ? state.dashboardPick.id : '';
@@ -837,18 +909,23 @@
       { ...licenseStats[0], pct: rate, caption: `占应持有 ${rate}% · 合计 ${total} 本` },
       { ...licenseStats[1], pct: pendingPct, caption: `占应持有 ${pendingPct}% · 待催办补充` }
     ];
-    const cards = details.map((item) => `<button type="button" class="license-stat-card license-stat-card--${safe(item.tone || 'filled')} is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="license" data-id="${safe(item.name)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><i class="license-stat-mini" aria-hidden="true"><b style="width:${item.pct}%"></b></i><em>${safe(item.caption)}</em></button>`).join('');
-    return `<div class="license-stat-panel"><div class="license-stat-grid license-stat-grid--stack">${cards}</div></div>`;
+    const cards = details.map((item) => `<button type="button" class="license-card license-card--${safe(item.tone || 'filled')} is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="license" data-id="${safe(item.name)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><div><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><em>${safe(item.caption)}</em></div><div class="license-ring" style="--p:${item.pct}" aria-hidden="true"><b>${item.pct}%</b></div></button>`).join('');
+    return `<div class="license-grid">${cards}</div>`;
   };
-  const dashboard = () => shell(`<div class="dashboard-page">${heading('鄞州低空治理工作台')}<section class="metric-grid">${dashboardMetric('个人用户','2,486','较上月 +8.6%','users')}${dashboardMetric('企业用户','186','较上月 +3.2%','companies')}${dashboardMetric('在册无人机','3,927','本周新增 28 架','drones')}${dashboardMetric('飞行计划','128','今日待执行 16 项','flights')}</section><section class="dashboard-grid"><article class="panel dashboard-panel"><header class="panel-head panel-head-stack"><div><p class="label">数据统计</p><h2>飞行区域分布</h2></div><div data-dashboard-area-filter>${areaRangeFilter()}</div></header><div class="panel-body" data-dashboard-area-body>${areaDistributionPanel()}</div></article><article class="panel dashboard-panel"><header class="panel-head"><div><p class="label">数据统计</p><h2>执照数据</h2></div></header><div class="panel-body" data-dashboard-license-body>${licenseStatsPanel()}</div></article></section><section class="bottom-grid dashboard-trend-grid"><article class="panel dashboard-panel"><header class="panel-head"><div><p class="label">趋势信息</p><h2>近 7 日飞行计划</h2></div></header><div class="panel-body" data-dashboard-trend-body>${flightTrendChart(flightTrendSeries)}</div></article></section></div>`,'dashboard');
+  const dashboardPanel = (title, bodyAttr, bodyHtml, extraClass = '') => `<article class="panel dashboard-panel ${extraClass}"><header class="panel-head"><div><p class="label">数据统计</p><h2>${title}</h2></div></header><div class="panel-body" ${bodyAttr}>${bodyHtml}</div></article>`;
+  const dashboard = () => shell(`<div class="dashboard-page">${heading('鄞州低空治理工作台')}<section class="metric-grid">${dashboardMetric('个人用户','2,486','较上月 +8.6%','users')}${dashboardMetric('企业用户','186','较上月 +3.2%','companies')}${dashboardMetric('在册无人机','3,927','本周新增 28 架','drones')}${dashboardMetric('飞行计划','128','今日待执行 16 项','flights')}</section><section class="dashboard-license">${dashboardPanel('执照数据', 'data-dashboard-license-body', licenseStatsPanel(), 'dashboard-panel--license')}</section><section class="dashboard-flight"><div data-dashboard-board-toolbar class="dashboard-flight-toolbar-host">${dashboardFlightToolbar()}</div><div class="dashboard-flight-layout">${dashboardPanel('起飞地分布', 'data-dashboard-area-body', areaDistributionPanel(), 'dashboard-panel--takeoff')}${dashboardPanel('飞行活动类型统计', 'data-dashboard-activity-type-body', activityTypeStatsPanel(), 'dashboard-panel--activity')}${dashboardPanel('飞行架次统计', 'data-dashboard-sortie-body', flightSortieStatsPanel(), 'dashboard-panel--sortie')}</div></section></div>`,'dashboard');
   const patchDashboardArea = () => {
     const page = app.querySelector('.dashboard-page');
     if (!page) { render(); return false; }
     page.classList.add('is-settled');
-    const filterHost = page.querySelector('[data-dashboard-area-filter]');
+    const toolbarHost = page.querySelector('[data-dashboard-board-toolbar]');
     const bodyHost = page.querySelector('[data-dashboard-area-body]');
-    if (filterHost) filterHost.innerHTML = areaRangeFilter();
+    const sortieHost = page.querySelector('[data-dashboard-sortie-body]');
+    const typeHost = page.querySelector('[data-dashboard-activity-type-body]');
+    if (toolbarHost) toolbarHost.innerHTML = dashboardFlightToolbar();
     if (bodyHost) bodyHost.innerHTML = areaDistributionPanel();
+    if (sortieHost) sortieHost.innerHTML = flightSortieStatsPanel();
+    if (typeHost) typeHost.innerHTML = activityTypeStatsPanel();
     return true;
   };
   const patchDashboardPick = () => {
@@ -856,13 +933,13 @@
     if (!page) { render(); return false; }
     page.classList.add('is-settled');
     const pick = state.dashboardPick || {};
-    page.querySelectorAll('.dist-row').forEach((row) => row.classList.toggle('is-active', pick.kind === 'area' && row.dataset.id === pick.id));
-    page.querySelectorAll('.license-stat-card').forEach((card) => card.classList.toggle('is-active', pick.kind === 'license' && card.dataset.id === pick.id));
-    page.querySelectorAll('.line-chart-point').forEach((point) => point.classList.toggle('is-active', pick.kind === 'trend' && point.dataset.id === pick.id));
-    page.querySelectorAll('.line-chart-labels span').forEach((label) => label.classList.toggle('is-active', pick.kind === 'trend' && label.textContent === pick.id));
-    page.querySelectorAll('.line-chart-values span').forEach((value, index) => {
-      const labels = [...page.querySelectorAll('.line-chart-labels span')];
-      value.classList.toggle('is-active', pick.kind === 'trend' && labels[index]?.textContent === pick.id);
+    page.querySelectorAll('.dist-row').forEach((row) => {
+      const kind = row.getAttribute('data-kind') || 'area';
+      row.classList.toggle('is-active', pick.kind === kind && row.dataset.id === pick.id);
+    });
+    page.querySelectorAll('.sortie-card,.license-card').forEach((card) => {
+      const kind = card.getAttribute('data-kind') || '';
+      card.classList.toggle('is-active', pick.kind === kind && card.dataset.id === pick.id);
     });
     return true;
   };
@@ -984,7 +1061,7 @@
     }
     return null;
   };
-  const detailWideLabels = new Set(['消息内容', '流程摘要', '计划名称', '飞行区域', '地址', '审批材料', '告警标题', '触发规则', '无人机主要用途', '活动介绍', '问题描述', '处理意见', '起降备降场地']);
+  const detailWideLabels = new Set(['消息内容', '流程摘要', '计划名称', '飞行区域', '地址', '审批材料', '告警标题', '触发规则', '无人机主要用途', '活动介绍', '问题描述', '处理意见', '起飞地', '常住地址']);
   const detailGrid = (rows) => {
     const cells = rows.map(([name, content, trusted]) => ({
       name,
@@ -1009,12 +1086,15 @@
     const servicePage = serviceDetail(key, id);
     if (servicePage) return servicePage;
     const item = rowsFor(key).find((row) => row.id === id) || {id,name:'业务记录'};
+    if (key === 'drone-blacklist') {
+      return shell(`${heading('无人机黑名单详情','',`<button class="secondary-btn" data-go="drone-blacklist">返回列表</button><button class="danger-btn" data-action="request-change" data-key="drone-blacklist" data-id="${safe(id)}">取消拉黑</button>`)}${sectionPanel('黑名单信息', detailGrid([['产品名称', item.aircraftName || '—'], ['登记标志', item.registrationMark || '—'], ['设备序列号', item.serialNumber || '—'], ['归属', item.owner || '—'], ['拉黑原因', item.reason || '—'], ['操作人', item.operatedBy || '—'], ['操作时间', item.operatedAt || '—'], ['对应管理状态', status('已禁用'), true]]))}`,'drone-blacklist');
+    }
     const related = relatedSections(key, item);
     const historyButton = related || key === 'alerts' ? '' : '<button class="secondary-btn" data-action="history">查看关联/历史记录</button>';
     if (key === 'users') {
       const personal = item.id === 'USR-001' ? data.profiles.personal : item;
       const supplement = personal.supplement || {};
-      return shell(`${heading('用户管理详情','',`<button class="secondary-btn" data-go="users">返回列表</button><button class="danger-btn" data-action="request-change" data-key="users" data-id="${safe(id)}">${operationLabel(key)}</button>`)}${sectionPanel('基本信息', detailGrid([['姓名', personal.name || item.name], ['身份证号', personal.idNumber || item.idNumber], ['手机号码', personal.phone || item.phone], ['地址', personal.address || item.address], ['飞行执照图片', status(personal.license || item.license || '未上传'), true], ['执照文件名', personal.licenseFileName || item.licenseFileName || '—'], ['状态', status(statusValue(key, item)), true]]))}${sectionPanel('补充信息', detailGrid([['所属地', supplement.district || '未填写'], ['紧急联系人', supplement.emergencyContact || '未填写'], ['紧急联系电话', supplement.emergencyPhone || '未填写']]))}${related}`);
+      return shell(`${heading('用户管理详情','',`<button class="secondary-btn" data-go="users">返回列表</button><button class="danger-btn" data-action="request-change" data-key="users" data-id="${safe(id)}">${operationLabel(key)}</button>`)}${sectionPanel('基本信息', detailGrid([['姓名', personal.name || item.name], ['身份证号', personal.idNumber || item.idNumber], ['手机号码', personal.phone || item.phone], ['地址', personal.address || item.address], ['飞行执照图片', status(personal.license || item.license || '未上传'), true], ['执照文件名', personal.licenseFileName || item.licenseFileName || '—'], ['状态', status(statusValue(key, item)), true]]))}${sectionPanel('补充信息', detailGrid([['常住地址', (data.formatResidenceAddress ? data.formatResidenceAddress(supplement) : '') || '未填写'], ['紧急联系人', supplement.emergencyContact || '未填写'], ['紧急联系电话', supplement.emergencyPhone || '未填写']]))}${related}`);
     }
     if (key === 'companies') {
       const company = item.id === 'ENT-001' ? data.profiles.company : item;
@@ -1027,7 +1107,7 @@
       const executedAtText = item.executed === '未执行'
         ? '—'
         : (item.executedAt || (item.history || []).slice().reverse().find((entry) => /执行/.test(entry.action || ''))?.time || '—');
-      const flightFields = [['计划编号', item.id], ['计划名称', item.title], ['提交人', submitter], ['飞行活动类型', item.activityType || '—'], ['任务性质', item.missionNature || item.purpose || '—'], ['操控模式', item.controlMode || '—'], ['飞行模式', item.flightMode || '—'], ['预计开始时间', item.startAt ? item.startAt.replace('T', ' ') : '—'], ['预计结束时间', item.endAt ? item.endAt.replace('T', ' ') : '—'], ['飞行区域', flightAreaText(item)], ['飞行设备', item.drone || '—'], ['通信联络方式', contact], ['最大飞行高度', item.maxAltitude ? `${item.maxAltitude} 米` : '—'], ['起降备降场地', item.takeoffSite || '—'], ['审批材料', item.approval || '未上传截图'], ['计划状态', status(item.status || '—'), true], ['执行状态', status(item.executed || '—'), true], ['执行时间', executedAtText]];
+      const flightFields = [['计划编号', item.id], ['计划名称', item.title], ['提交人', submitter], ['飞行活动类型', item.activityType || '—'], ['任务性质', item.missionNature || item.purpose || '—'], ['操控模式', item.controlMode || '—'], ['飞行模式', item.flightMode || '—'], ['预计开始时间', item.startAt ? item.startAt.replace('T', ' ') : '—'], ['预计结束时间', item.endAt ? item.endAt.replace('T', ' ') : '—'], ['飞行区域', flightAreaText(item)], ['飞行设备', item.drone || '—'], ['通信联络方式', contact], ['最大飞行高度', item.maxAltitude ? `${item.maxAltitude} 米` : '—'], ['起飞地', item.takeoffSite || '—'], ['审批材料', item.approval || '未上传截图'], ['计划状态', status(item.status || '—'), true], ['执行状态', status(item.executed || '—'), true], ['执行时间', executedAtText]];
       return shell(`${heading('飞行计划详情','',`<button class="secondary-btn" data-go="flights">返回列表</button>`)}${detailGrid(flightFields)}${related}`);
     }
     if (key === 'volunteers') {
@@ -1080,11 +1160,11 @@
     }
     const uomFields = key === 'certificates' ? data.uomCertificateFields : key === 'drones' ? data.uomDroneFields : null;
     const registrationState = key === 'drones' ? droneRegistrationState(item) : null;
-    const adminDisable = key === 'drones' && (state.disabledDrones.has(item.id) || item.status === '已禁用');
+    const adminDisable = key === 'drones' && (state.disabledDrones.has(item.id) || item.manageState === '已禁用');
     const details = uomFields ? uomFields.map(([field, name]) => [name, key === 'certificates' && field === 'registrationStatus' ? certificateStatus(item.state || data.uomValue(item, field)) : key === 'drones' && field === 'registrationStatus' ? registrationState : data.uomValue(item, field), (key === 'certificates' || key === 'drones') && field === 'registrationStatus']).concat(key === 'certificates' ? [['归集更新时间', item.updated || '—']] : [['归属', item.owner || '—'], ['设备分组', item.group || '—'], ['管理状态', status(adminDisable ? '已禁用' : '正常'), true]]) : Object.entries(item).filter(([, content]) => typeof content !== 'object' || content === null).map(([field, content]) => [label(field), ['status','state','executed'].includes(field) ? status(statusValue(key, item)) : safe(content), true]);
     const canFormEdit = formModules.includes(key);
     const noEdit = ['certificates', 'drones', 'flights', 'enrollments', 'feedback', 'audit', 'alerts', 'interface'].includes(key);
-    const detailOps = `${canFormEdit ? `<button class="primary-btn" data-go="form/${key}/${safe(id)}">编辑记录</button>` : ''}${key === 'drones' && registrationState !== '已注销' ? `<button class="danger-btn" data-action="cancel-drone" data-id="${safe(id)}">手动注销</button>` : ''}${key === 'certificates' && item.state === '已注销' ? '' : (noEdit && key !== 'certificates' && key !== 'drones' ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : (key === 'certificates' && item.state !== '已注销' ? `<button class="danger-btn" data-action="request-change" data-key="certificates" data-id="${safe(id)}">手动注销</button>` : (key === 'drones' && !(state.disabledDrones.has(item.id) || item.status === '已禁用') ? `<button class="secondary-btn" data-action="request-change" data-key="drones" data-id="${safe(id)}">禁用设备</button>` : (!noEdit && !canFormEdit ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : ''))))}${historyButton}`;
+    const detailOps = `${canFormEdit ? `<button class="primary-btn" data-go="form/${key}/${safe(id)}">编辑记录</button>` : ''}${key === 'drones' && registrationState !== '已注销' ? `<button class="danger-btn" data-action="cancel-drone" data-id="${safe(id)}">手动注销</button>` : ''}${key === 'certificates' && item.state === '已注销' ? '' : (noEdit && key !== 'certificates' && key !== 'drones' ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : (key === 'certificates' && item.state !== '已注销' ? `<button class="danger-btn" data-action="request-change" data-key="certificates" data-id="${safe(id)}">手动注销</button>` : (key === 'drones' && !(state.disabledDrones.has(item.id) || item.manageState === '已禁用') ? `<button class="secondary-btn" data-action="request-change" data-key="drones" data-id="${safe(id)}">禁用设备</button>` : (!noEdit && !canFormEdit ? `<button class="secondary-btn" data-action="request-change" data-key="${key}" data-id="${safe(id)}">${operationLabel(key)}</button>` : ''))))}${historyButton}`;
     return shell(`${heading(`${meta[key]?.[0] || '模块'}详情`,'',`<button class="secondary-btn" data-go="${key}">返回列表</button>${detailOps}`)}${detailGrid(details)}${key === 'certificates' ? certificateAttachment(item) : ''}${related}`);
   };
   const feedbackFieldKey = (name) => {
@@ -1153,6 +1233,34 @@
       return `<tr><td>${safe(item.id)}</td><td>${safe(item.submitterName || '—')}</td><td>${safe(submitterType)}</td><td>${safe(formType)}</td><td>${safe(item.time || '—')}</td><td><div class="actions"><button class="text-btn" data-action="view-feedback-form" data-id="${safe(item.id)}">查看详情</button></div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   };
+
+  const configRowsSorted = (rows) => (rows || []).slice().sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.name || '').localeCompare(String(b.name || ''), 'zh'));
+  const configListTable = (key, rows) => {
+    const q = state.query.trim().toLowerCase();
+    const visible = configRowsSorted(rows).filter((item) => (!q || `${item.id} ${item.name}`.toLowerCase().includes(q)) && (state.filter === '全部' || (item.state || '启用') === state.filter));
+    if (!visible.length) return '<div class="empty">暂无符合条件的配置</div>';
+    return `<div class="table-wrap"><table class="data-table"><thead><tr><th>编号</th><th>名称</th><th>排序</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr><td>${safe(item.id)}</td><td>${safe(item.name)}</td><td>${safe(String(item.sort || '—'))}</td><td>${status(item.state || '启用')}</td><td>${safe(item.updated || '—')}</td><td><div class="actions"><button class="text-btn" data-action="modal" data-modal="edit-config" data-key="${key}" data-item="${safe(item.id)}">编辑</button><button class="text-btn ${item.state === '启用' ? 'warning' : ''}" data-action="toggle-config" data-key="${key}" data-id="${safe(item.id)}">${item.state === '启用' ? '停用' : '启用'}</button><button class="text-btn danger" data-action="request-delete-config" data-key="${key}" data-id="${safe(item.id)}">删除</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  };
+  const configFilterBar = (placeholder) => {
+    const options = ['全部', '启用', '停用'];
+    return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="${safe(placeholder)}" aria-label="搜索配置" /><select id="state-filter" aria-label="状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+  };
+  const streetsPage = () => shell(`${heading('街道配置','',`<button class="primary-btn" data-action="modal" data-modal="edit-config" data-key="streets" data-item="new">新增街道</button>`)}${configFilterBar('搜索街道名称或编号')}${configListTable('streets', data.streetConfigs || [])}`,'streets');
+  const districtsPage = () => shell(`${heading('市区配置','',`<button class="primary-btn" data-action="modal" data-modal="edit-config" data-key="districts" data-item="new">新增市区</button>`)}${configFilterBar('搜索市区名称或编号')}${configListTable('districts', data.districtConfigs || [])}`,'districts');
+  const flightActivityTypesPage = () => shell(`${heading('飞行活动类型配置','',`<button class="primary-btn" data-action="modal" data-modal="edit-config" data-key="flight-activity-types" data-item="new">新增类型</button>`)}${configFilterBar('搜索类型名称或编号')}${configListTable('flight-activity-types', data.flightActivityTypes || [])}`,'flight-activity-types');
+  const configBundle = (key) => {
+    if (key === 'streets') {
+      if (!Array.isArray(data.streetConfigs)) data.streetConfigs = [];
+      return { list: data.streetConfigs, prefix: 'ST', label: '街道', placeholder: '如：钟公庙街道' };
+    }
+    if (key === 'districts') {
+      if (!Array.isArray(data.districtConfigs)) data.districtConfigs = [];
+      return { list: data.districtConfigs, prefix: 'DST', label: '市区', placeholder: '如：鄞州区' };
+    }
+    if (!Array.isArray(data.flightActivityTypes)) data.flightActivityTypes = [];
+    return { list: data.flightActivityTypes, prefix: 'FAT', label: '飞行活动类型', placeholder: '如：一般飞行活动' };
+  };
+
   const feedbackPage = () => {
     const tabs = `<div class="page-tabs">${[['content', '反馈内容'], ['forms', '反馈表单管理']].map(([tab, text]) => `<button class="${state.feedbackTab === tab ? 'active' : ''}" data-action="feedback-tab" data-value="${tab}">${text}</button>`).join('')}</div>`;
     const formsTable = data.feedbackForms.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>反馈类型</th><th>类型说明</th><th>字段数</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${data.feedbackForms.map((form) => `<tr><td>${safe(form.name)}</td><td>${safe(form.scene)}</td><td>${form.fields.length} 项</td><td>${status(form.state)}</td><td>${safe(form.updated)}</td><td><div class="actions"><button class="text-btn" data-go="form/feedback-forms/${safe(form.id)}">编辑</button><button class="text-btn warning" data-action="toggle-feedback-form" data-id="${safe(form.id)}">${form.state === '已发布' ? '下架' : '重新发布'}</button><button class="text-btn danger" data-action="request-delete-form" data-id="${safe(form.id)}">删除</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无反馈类型表单</div>';
@@ -1347,6 +1455,24 @@ if (type === 'activity-confirm') {
       const item = data.activities.find((activity) => activity.id === state.modal.item);
       return modalShell('确认活动', `活动确认须由指定账号执行。当前登录账号“综合管理员”具备活动确认权限。确认后“${safe(item?.title || '')}”将进入“报名中”状态并对用户端发布。`, '', 'submit-activity-confirm', '确认发布');
     }
+
+    if (type === 'edit-config') {
+      const key = state.modal.key;
+      const bundle = configBundle(key);
+      const isNew = state.modal.item === 'new';
+      const title = isNew ? `新增${bundle.label}` : `编辑${bundle.label}`;
+      const d = state.draft;
+      const placeholder = bundle.placeholder || '请填写名称';
+      const body = `<form class="form-stack" id="admin-form"><label>名称<input required data-draft-field="name" value="${safe(d.name || '')}" placeholder="${placeholder}" maxlength="40" /></label><label>排序<input required type="number" min="1" data-draft-field="sort" value="${safe(String(d.sort || 1))}" /></label><label>状态<select data-draft-field="state"><option${(d.state || '启用') === '启用' ? ' selected' : ''}>启用</option><option${d.state === '停用' ? ' selected' : ''}>停用</option></select></label></form>`;
+      return modalShell(title, '', body, 'submit-config', '保存');
+    }
+    if (type === 'config-delete') {
+      const key = state.modal.key;
+      const bundle = configBundle(key);
+      const item = bundle.list.find((row) => row.id === state.modal.item);
+      return modalShell(`删除${bundle.label}`, `确认删除“${safe(item?.name || '')}”？删除后用户端下拉将不再展示该项。`, '', 'submit-config-delete', '确认删除');
+    }
+
     if (type === 'form-delete') {
       const item = data.feedbackForms.find((form) => form.id === state.modal.item);
       return modalShell('删除反馈表单', `将删除“${safe(item?.name || '')}”。删除后用户端不再展示该表单入口。`, '', 'submit-form-delete', '确认删除');
@@ -1368,17 +1494,26 @@ if (type === 'activity-confirm') {
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认拉黑</h2><p>确认对“${safe(displayName)}”执行拉黑？</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-blacklist">确认拉黑</button></div></section></div>`;
     }
     if (type === 'unblacklist-confirm') {
-      const row = ledgers.blacklist.find((entry) => entry.id === state.modal.item);
-      const displayName = row?.name || '该对象';
+      const isDrone = state.modal.key === 'drone-blacklist';
+      const row = isDrone
+        ? (ledgers.droneBlacklist || []).find((entry) => entry.id === state.modal.item)
+        : ledgers.blacklist.find((entry) => entry.id === state.modal.item);
+      const displayName = isDrone ? (row?.aircraftName || '该设备') : (row?.name || '该对象');
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认取消拉黑</h2><p>确认对“${safe(displayName)}”执行取消拉黑？</p><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-unblacklist">确认</button></div></section></div>`;
     }
     if (type === 'logout-confirm') {
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认退出登录</h2><p>退出后需重新登录才能进入管理平台。</p><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="submit-logout">确认退出</button></div></section></div>`;
     }
+    if (type === 'drone-disable-confirm') {
+      const row = data.drones.find((entry) => entry.id === state.modal.item);
+      const label = row ? (data.uomValue(row, 'aircraftName') || row.aircraftName || row.drone || state.modal.item) : state.modal.item;
+      const body = `<form class="form-stack" id="admin-form"><label>拉黑原因<textarea required data-draft-field="reason" rows="3" placeholder="请填写禁用/拉黑原因">${safe(state.draft.reason || '')}</textarea></label></form>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认禁用设备</h2><p>确认对“${safe(label)}”执行禁用设备？</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-drone-disable">确认</button></div></section></div>`;
+    }
     if (type === 'confirm') {
       const confirmRows = state.modal.key ? rowsFor(state.modal.key) : [];
       const row = (confirmRows || []).find((entry) => entry.id === state.modal.item);
-      const label = row?.name || row?.title || state.modal.item || '该记录';
+      const label = (state.modal.key === 'drones' && row ? (data.uomValue(row, 'aircraftName') || row.aircraftName || row.drone) : '') || row?.aircraftName || row?.name || row?.title || state.modal.item || '该记录';
       return modalShell(`确认${state.modal.operation}`, `确认对“${safe(label)}”执行${state.modal.operation}？`, '', 'submit-modal', '确认');
     }
     if (['create', 'edit'].includes(type)) {
@@ -1402,6 +1537,9 @@ if (type === 'activity-confirm') {
     const key = pieces[0];
     const page = key === 'dashboard' ? dashboard
       : key === 'feedback' ? feedbackPage
+      : key === 'streets' ? streetsPage
+      : key === 'districts' ? districtsPage
+      : key === 'flight-activity-types' ? flightActivityTypesPage
       : key === 'volunteers' ? volunteersPage
       : key === 'rid-modules' ? ridModulesPage
       : key === 'shoulder-lights' ? shoulderLightsPage
@@ -1433,6 +1571,21 @@ if (type === 'activity-confirm') {
     if (!el) return;
     if (el.dataset.go) { if (String(el.dataset.go).startsWith('form/')) { state.formKey = ''; state.formId = ''; } go(el.dataset.go); return; }
     const action = el.dataset.action;
+    if (action === 'pick-region') {
+      const level = el.dataset.level;
+      const value = el.dataset.value || '';
+      const next = { province: state.draft.province || '', city: state.draft.city || '', district: state.draft.district || '' };
+      if (level === 'province') { next.province = value; next.city = ''; next.district = ''; }
+      else if (level === 'city') { next.city = value; next.district = ''; }
+      else if (level === 'district') { next.district = value; }
+      const normalized = data.normalizeResidenceSelection ? data.normalizeResidenceSelection(next) : next;
+      state.draft.province = normalized.province || '';
+      state.draft.city = normalized.city || '';
+      state.draft.district = normalized.district || '';
+      if (state.formKey === 'users') state.userProfileDraft = { ...state.draft };
+      render();
+      return;
+    }
     if (action === 'toggle-sidebar') { state.sidebarCollapsed = !state.sidebarCollapsed; render(); }
     if (action === 'toggle-help') { state.helpCollapsed = !state.helpCollapsed; try { window.localStorage.setItem(helpStorageKey, state.helpCollapsed ? '1' : '0'); } catch {} render(); }
     if (action === 'toggle-group') { const group = el.dataset.group; if (state.expandedGroups.has(group)) state.expandedGroups.delete(group); else state.expandedGroups.add(group); render(); }
@@ -1444,8 +1597,9 @@ if (type === 'activity-confirm') {
       const id = el.dataset.id || el.dataset.label || '';
       state.dashboardPick = { kind, id, value: el.dataset.value || '' };
       patchDashboardPick();
-      if (kind === 'trend') softToast(`${el.dataset.label || id} 飞行计划 ${el.dataset.value || ''} 项`);
-      else if (kind === 'area') softToast(`${el.dataset.label || id}：${el.dataset.value || ''} 项飞行计划`);
+      if (kind === 'area') softToast(`${el.dataset.label || id}：${el.dataset.value || ''} 项（按起飞地）`);
+      else if (kind === 'activity-type') softToast(`${el.dataset.label || id}：${el.dataset.value || ''} 项`);
+      else if (kind === 'sortie') softToast(`${el.dataset.label || id}：${el.dataset.value || ''}`);
       else if (kind === 'license') softToast(`${el.dataset.label || id}：${el.dataset.value || ''}`);
       return;
     }
@@ -1455,7 +1609,7 @@ if (type === 'activity-confirm') {
       state.dashboardPick = null;
       patchDashboardArea();
       if (range === 'custom') softToast('请选择自选开始与结束日期');
-      else softToast(`飞行区域分布已切换为${areaRangeOptions.find((item) => item.id === range)?.label || '近一周'}`);
+      else softToast(`飞行报备统计已切换为${areaRangeOptions.find((item) => item.id === range)?.label || '近一周'}`);
       return;
     }
     if (action === 'notify-video') notify('正在播放示例视频');
@@ -1511,6 +1665,21 @@ if (type === 'activity-confirm') {
       render();
       return;
     }
+
+    if (action === 'modal' && el.dataset.modal === 'edit-config') {
+      const key = el.dataset.key;
+      const list = configBundle(key).list;
+      const isNew = el.dataset.item === 'new';
+      const src = isNew ? null : list.find((row) => row.id === el.dataset.item);
+      const nextSort = list.length ? Math.max(...list.map((row) => Number(row.sort) || 0)) + 1 : 1;
+      state.draft = src
+        ? { name: src.name || '', sort: src.sort || 1, state: src.state || '启用' }
+        : { name: '', sort: nextSort, state: '启用' };
+      state.modal = { type: 'edit-config', key, item: el.dataset.item };
+      render();
+      return;
+    }
+
     if (action === 'modal') {
       const type = el.dataset.modal;
       const key = el.dataset.key || currentMenu();
@@ -1526,7 +1695,7 @@ if (type === 'activity-confirm') {
         const user = data.users.find((entry) => entry.id === item);
         const supplement = (item === 'USR-001' ? data.profiles.personal.supplement : user?.supplement) || {};
         const normalizedSupplement = data.normalizePersonalSupplement ? data.normalizePersonalSupplement(supplement) : supplement;
-        state.userProfileDraft = user ? { name: user.name || '', idNumber: user.idNumber || '', phone: user.phone || '', address: user.address || '', district: normalizedSupplement.district || '', emergencyContact: normalizedSupplement.emergencyContact || '', emergencyPhone: normalizedSupplement.emergencyPhone || '' } : {};
+        state.userProfileDraft = user ? { name: user.name || '', idNumber: user.idNumber || '', phone: user.phone || '', address: user.address || '', province: normalizedSupplement.province || '', city: normalizedSupplement.city || '', district: normalizedSupplement.district || '', addressDetail: normalizedSupplement.addressDetail || '', emergencyContact: normalizedSupplement.emergencyContact || '', emergencyPhone: normalizedSupplement.emergencyPhone || '' } : {};
       }
       if (key === 'companies' && type === 'edit') {
         const company = data.companies.find((entry) => entry.id === item);
@@ -1653,6 +1822,63 @@ if (type === 'activity-confirm') {
       render();
       return;
     }
+
+    if (action === 'toggle-config') {
+      const key = el.dataset.key;
+      const list = configBundle(key).list;
+      const item = (list || []).find((row) => row.id === el.dataset.id);
+      if (item) {
+        item.state = item.state === '启用' ? '停用' : '启用';
+        item.updated = data.now;
+        syncFlightConfigLists();
+        persistPublicService();
+        notify(item.state === '启用' ? '已启用并同步用户端' : '已停用，用户端不再展示');
+      }
+    }
+    if (action === 'request-delete-config') {
+      state.modal = { type: 'config-delete', key: el.dataset.key, item: el.dataset.id };
+      render();
+      return;
+    }
+    if (action === 'submit-config-delete') {
+      const key = state.modal.key;
+      const bundle = configBundle(key);
+      const list = bundle.list;
+      const index = (list || []).findIndex((row) => row.id === state.modal.item);
+      if (index >= 0) list.splice(index, 1);
+      syncFlightConfigLists();
+      persistPublicService();
+      state.modal = null;
+      notify(`${bundle.label}已删除`);
+    }
+    if (action === 'submit-config') {
+      const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
+      syncDraftFromDom();
+      const key = state.modal.key;
+      const bundle = configBundle(key);
+      const list = bundle.list;
+      const name = String(state.draft.name || '').trim();
+      const sort = Number(state.draft.sort) > 0 ? Number(state.draft.sort) : 1;
+      const cfgState = state.draft.state === '停用' ? '停用' : '启用';
+      if (!name) { notify('请填写名称'); return; }
+      if ((list || []).some((row) => row.name === name && row.id !== state.modal.item)) { notify('名称已存在'); return; }
+      if (state.modal.item === 'new') {
+        const maxNum = (list || []).reduce((max, row) => {
+          const n = Number(String(row.id || '').replace(/\D/g, '')) || 0;
+          return Math.max(max, n);
+        }, 0);
+        list.unshift({ id: `${bundle.prefix}-${String(maxNum + 1).padStart(2, '0')}`, name, sort, state: cfgState, updated: data.now });
+        notify(`${bundle.label}已新增`);
+      } else {
+        const item = (list || []).find((row) => row.id === state.modal.item);
+        if (item) Object.assign(item, { name, sort, state: cfgState, updated: data.now });
+        notify('配置已保存');
+      }
+      syncFlightConfigLists();
+      persistPublicService();
+      state.modal = null;
+    }
+
     if (action === 'feedback-tab') { state.feedbackTab = el.dataset.value; state.query = ''; state.filter = '全部'; render(); }
     if (action === 'view-feedback-form') {
       state.feedbackTab = 'content';
@@ -1754,8 +1980,8 @@ if (type === 'activity-confirm') {
       }
       if (key === 'users') {
         const draftUser = state.userProfileDraft;
-        const { district, emergencyContact, emergencyPhone, ...basic } = draftUser;
-        const personalSupplement = data.normalizePersonalSupplement ? data.normalizePersonalSupplement({ district, emergencyContact, emergencyPhone }) : { district, emergencyContact, emergencyPhone };
+        const { province, city, district, addressDetail, emergencyContact, emergencyPhone, ...basic } = draftUser;
+        const personalSupplement = data.normalizePersonalSupplement ? data.normalizePersonalSupplement({ province, city, district, addressDetail, emergencyContact, emergencyPhone }) : { province, city, district, addressDetail, emergencyContact, emergencyPhone };
         if (isNew) {
           const next = `USR-${String(data.users.length + 1).padStart(3, '0')}`;
           data.users.unshift({ id: next, ...basic, license: '未上传', licenseFileName: '', status: '正常', supplement: personalSupplement });
@@ -2258,10 +2484,10 @@ if (type === 'activity-confirm') {
       const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
       if (state.modal?.type === 'edit' && state.modal.key === 'users') {
         const user = data.users.find((entry) => entry.id === state.modal.item);
-        const { district, emergencyContact, emergencyPhone, ...basic } = state.userProfileDraft;
+        const { province, city, district, addressDetail, emergencyContact, emergencyPhone, ...basic } = state.userProfileDraft;
         if (user) Object.assign(user, basic);
         Object.assign(data.profiles.personal, basic);
-        Object.assign(data.profiles.personal.supplement, data.normalizePersonalSupplement ? data.normalizePersonalSupplement({ district, emergencyContact, emergencyPhone }) : { district, emergencyContact, emergencyPhone });
+        Object.assign(data.profiles.personal.supplement, data.normalizePersonalSupplement ? data.normalizePersonalSupplement({ province, city, district, addressDetail, emergencyContact, emergencyPhone }) : { province, city, district, addressDetail, emergencyContact, emergencyPhone });
         persistProfile();
         state.modal = null;
         notify('个人信息已保存，并同步至用户端档案');
@@ -2286,12 +2512,6 @@ if (type === 'activity-confirm') {
           if (certificate) { certificate.state = '已注销'; certificate.registrationStatus = '已注销'; certificate.history = [...(certificate.history || []), { time: `${data.now} 10:30`, action: '后台手动注销', detail: '公安管理人员手动注销登记证' }]; }
           const drone = data.drones.find((entry) => entry.certificate === item);
           if (drone) { drone.status = '已注销'; drone.registrationStatus = '已注销'; }
-          persistLedger();
-        }
-        if (key === 'drones') {
-          state.disabledDrones.add(item);
-          const drone = data.drones.find((entry) => entry.id === item);
-          if (drone) { drone.status = '已禁用'; }
           persistLedger();
         }
         if (key === 'shoulder-lights') {
@@ -2347,6 +2567,36 @@ if (type === 'activity-confirm') {
       state.modal = null;
       notify('无人机已手动注销，关联登记证同步更新');
     }
+    if (action === 'submit-drone-disable') {
+      const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
+      const reason = String(state.draft.reason || '').trim();
+      if (!reason) { notify('请填写拉黑原因'); return; }
+      const item = state.modal.item;
+      const drone = data.drones.find((entry) => entry.id === item);
+      const aircraftName = drone ? (data.uomValue(drone, 'aircraftName') || drone.aircraftName || drone.drone || item) : item;
+      const exists = (ledgers.droneBlacklist || []).some((row) => row.droneId === item && row.state === '已拉黑');
+      if (!exists) {
+        const maxNum = (ledgers.droneBlacklist || []).reduce((max, row) => Math.max(max, Number(String(row.id || '').replace(/\D/g, '')) || 0), 0);
+        ledgers.droneBlacklist.unshift({
+          id: `DBL-${String(maxNum + 1).padStart(3, '0')}`,
+          droneId: item,
+          aircraftName,
+          registrationMark: drone ? (drone.registrationMark || data.uomValue(drone, 'registrationMark') || '—') : '—',
+          serialNumber: drone ? (drone.serialNumber || data.uomValue(drone, 'serialNumber') || '—') : '—',
+          owner: drone?.owner || '—',
+          reason,
+          state: '已拉黑',
+          operatedBy: state.session?.account || 'admin',
+          operatedAt: `${data.now} 10:30`
+        });
+      }
+      if (drone) drone.manageState = '已禁用';
+      syncDroneBlacklistState();
+      state.draft = {};
+      state.modal = null;
+      notify('设备已加入无人机黑名单');
+    }
+
     if (action === 'submit-blacklist') {
       const form = document.querySelector('#admin-form'); if (form && !form.reportValidity()) return;
       const reason = String(state.draft.reason || '').trim();
@@ -2377,9 +2627,30 @@ if (type === 'activity-confirm') {
       notify(`已拉黑“${displayName}”`);
     }
     if (action === 'submit-unblacklist') {
-      const operatedBy = String(state.draft.operatedBy || '综合管理员').trim();
+      const operatedBy = String(state.draft.operatedBy || state.session?.account || '综合管理员').trim();
       const operatedAt = String(state.draft.operatedAtDisplay || state.draft.operatedAt || `${data.now} 09:24`).trim();
       const id = state.modal.item;
+      if (state.modal.key === 'drone-blacklist') {
+        const list = ledgers.droneBlacklist || [];
+        const index = list.findIndex((entry) => entry.id === id);
+        const item = index >= 0 ? list[index] : null;
+        if (index < 0) {
+          state.modal = null;
+          state.draft = {};
+          notify('未找到可取消的黑名单记录');
+          return;
+        }
+        list.splice(index, 1);
+        if (item.droneId) {
+          const drone = data.drones.find((entry) => entry.id === item.droneId);
+          if (drone) drone.manageState = '正常';
+        }
+        syncDroneBlacklistState();
+        state.modal = null;
+        state.draft = {};
+        notify(`已取消拉黑“${item.aircraftName || id}”，设备管理状态已恢复为正常`);
+        return;
+      }
       const item = ledgers.blacklist.find((entry) => entry.id === id);
       if (item) {
         Object.assign(item, { state: '已取消', operatedBy, operatedAt });
@@ -2426,12 +2697,18 @@ if (type === 'activity-confirm') {
         render();
         return;
       }
-      if (key === 'blacklist') {
-        const operatedBy = ledgers.accounts.find((account) => account.role === '系统管理员')?.name || '综合管理员';
+      if (key === 'blacklist' || key === 'drone-blacklist') {
+        const operatedBy = state.session?.account || ledgers.accounts?.find((account) => account.role === '系统管理员')?.name || '综合管理员';
         const now = new Date();
         const operatedAtDisplay = `${data.now} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         state.draft = { operatedBy, operatedAtDisplay };
         state.modal = { type: 'unblacklist-confirm', key, item: el.dataset.id, operation: '取消拉黑' };
+        render();
+        return;
+      }
+      if (key === 'drones') {
+        state.draft = { reason: '' };
+        state.modal = { type: 'drone-disable-confirm', key, item: el.dataset.id, operation: '禁用设备' };
         render();
         return;
       }
@@ -2607,14 +2884,22 @@ if (type === 'activity-confirm') {
     }
     if (event.target.dataset?.companyProfileField !== undefined) { state.companyProfileDraft[event.target.dataset.companyProfileField] = event.target.value; return; }
     if (event.target.dataset?.draftField !== undefined) {
-      state.draft[event.target.dataset.draftField] = event.target.value;
-      if (event.target.dataset.draftField === 'holder') {
+      const field = event.target.dataset.draftField;
+      if (field === 'regionPath') {
+        const parsed = data.parseResidenceRegionPath ? data.parseResidenceRegionPath(event.target.value) : { province: '', city: '', district: '' };
+        state.draft.province = parsed.province || '';
+        state.draft.city = parsed.city || '';
+        state.draft.district = parsed.district || '';
+        return;
+      }
+      state.draft[field] = event.target.value;
+      if (field === 'holder') {
         const officer = (data.policeOfficers || []).find((item) => item.name === event.target.value);
         if (officer) state.draft.unit = officer.unit;
       }
-      if (event.target.dataset.draftField === 'mediaType') render();
-      else if (event.target.dataset.draftField === 'holder') render();
-      else if (event.target.dataset.draftField === 'result' && state.formKey === 'verification') render();
+      if (field === 'mediaType') render();
+      else if (field === 'holder') render();
+      else if (field === 'result' && state.formKey === 'verification') render();
       return;
     }
     if (event.target.dataset?.configRow !== undefined) {

@@ -4,26 +4,169 @@
     '百丈街道', '东胜街道', '明楼街道', '白鹤街道', '东柳街道', '中河街道',
     '下应街道', '钟公庙街道', '首南街道', '潘火街道', '福明街道', '东郊街道',
     '邱隘镇', '五乡镇', '云龙镇', '古林镇', '石碶镇', '横溪镇', '姜山镇',
-    '洞桥镇', '鄞江镇', '章水镇', '龙观乡'
+    '洞桥镇', '鄞江镇', '章水镇', '龙观乡', '东钱湖镇'
   ];
-  const normalizePersonalSupplement = (supplement = {}) => {
-    let district = String(supplement.district || '').trim();
-    if (!district && supplement.usualArea) {
-      district = yinzhouStreets.find((street) => String(supplement.usualArea).includes(street)) || '';
+  const streetConfigs = yinzhouStreets.map((name, index) => ({
+    id: `ST-${String(index + 1).padStart(2, '0')}`,
+    name,
+    sort: index + 1,
+    state: '启用',
+    updated: now
+  }));
+  const flightActivityTypes = [
+    { id: 'FAT-01', name: '一般飞行活动', sort: 1, state: '启用', updated: now },
+    { id: 'FAT-02', name: '特殊飞行活动', sort: 2, state: '启用', updated: now }
+  ];
+  const ningboDistrictSeed = ['海曙区', '江北区', '镇海区', '北仑区', '鄞州区', '奉化区', '余姚市', '慈溪市', '宁海县', '象山县'];
+  const districtConfigs = ningboDistrictSeed.map((name, index) => ({
+    id: `DST-${String(index + 1).padStart(2, '0')}`,
+    name,
+    sort: index + 1,
+    state: '启用',
+    updated: now
+  }));
+  const enabledConfigNames = (rows) => (rows || [])
+    .filter((item) => (item.state || '启用') === '启用')
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.name || '').localeCompare(String(b.name || ''), 'zh'))
+    .map((item) => item.name)
+    .filter(Boolean);
+  const formatNingboDistrictLabel = (district = '') => {
+    const name = String(district || '').trim();
+    if (!name) return '';
+    return name.startsWith('宁波市') ? name : `宁波市${name}`;
+  };
+  const parseNingboDistrictName = (city = '') => String(city || '').trim().replace(/^宁波市/, '');
+  const residenceRegions = {
+    '浙江省': {
+      '杭州市': ['上城区', '拱墅区', '西湖区', '滨江区', '余杭区'],
+      '宁波市': ['海曙区', '江北区', '镇海区', '北仑区', '鄞州区', '奉化区'],
+      '温州市': ['鹿城区', '龙湾区', '瓯海区']
+    },
+    '上海市': {
+      '上海市': ['黄浦区', '徐汇区', '浦东新区', '静安区']
+    },
+    '北京市': {
+      '北京市': ['东城区', '西城区', '朝阳区', '海淀区']
+    },
+    '天津市': {
+      '天津市': ['和平区', '河东区', '南开区']
+    },
+    '河北省': {
+      '石家庄市': ['长安区', '桥西区', '新华区'],
+      '唐山市': ['路南区', '路北区']
     }
-    if (district && !yinzhouStreets.includes(district)) district = '';
+  };
+  const residenceProvinceOptions = () => Object.keys(residenceRegions);
+  const residenceCityOptions = (province) => Object.keys(residenceRegions[province] || {});
+  const residenceDistrictOptions = (province, city) => {
+    const districts = (residenceRegions[province] || {})[city];
+    return Array.isArray(districts) ? districts.slice() : Object.keys(districts || {});
+  };
+  const normalizeResidenceSelection = (seed = {}) => {
+    let province = String(seed.province || '').trim();
+    let city = String(seed.city || '').trim();
+    let district = String(seed.district || '').trim();
+    const provinces = residenceProvinceOptions();
+    if (!provinces.includes(province)) province = provinces[0] || '';
+    const cities = residenceCityOptions(province);
+    if (!cities.includes(city)) city = cities[0] || '';
+    const districts = residenceDistrictOptions(province, city);
+    if (!districts.includes(district)) district = districts[0] || '';
+    return { province, city, district };
+  };
+  const formatResidenceRegionLabel = (supplement = {}) => [supplement.province, supplement.city, supplement.district].filter(Boolean).join(' / ');
+  const residenceRegionPathOptions = () => {
+    const options = [];
+    residenceProvinceOptions().forEach((province) => {
+      residenceCityOptions(province).forEach((city) => {
+        residenceDistrictOptions(province, city).forEach((district) => {
+          options.push({
+            value: `${province}|${city}|${district}`,
+            label: `${province} / ${city} / ${district}`,
+            province,
+            city,
+            district
+          });
+        });
+      });
+    });
+    return options;
+  };
+  const parseResidenceRegionPath = (value = '') => {
+    const [province = '', city = '', district = ''] = String(value || '').split('|');
+    return { province, city, district };
+  };
+  const formatResidenceRegionPath = (supplement = {}) => {
+    const item = { province: supplement.province || '', city: supplement.city || '', district: supplement.district || '' };
+    return item.province && item.city && item.district ? `${item.province}|${item.city}|${item.district}` : '';
+  };
+  const normalizePersonalSupplement = (supplement = {}) => {
+    let province = String(supplement.province || '').trim();
+    let city = String(supplement.city || '').trim();
+    let district = String(supplement.district || '').trim();
+    let street = String(supplement.street || '').trim();
+    let addressDetail = String(supplement.addressDetail || '').trim();
+    const streets = enabledConfigNames((typeof window !== 'undefined' && window.LowAltitudeMock && window.LowAltitudeMock.streetConfigs) || streetConfigs);
+    // 旧口径：district 存街道名
+    if (district && streets.includes(district)) {
+      street = street || district;
+      district = '鄞州区';
+      province = province || '浙江省';
+      city = city || '宁波市';
+    }
+    if (!street && supplement.usualArea) {
+      street = streets.find((name) => String(supplement.usualArea).includes(name)) || '';
+      if (street) {
+        province = province || '浙江省';
+        city = city || '宁波市';
+        district = district || '鄞州区';
+      }
+    }
+    // 街道并入手填详细地址
+    if (street) {
+      if (!addressDetail.includes(street)) addressDetail = [street, addressDetail].filter(Boolean).join('');
+      street = '';
+    }
+    if (province && !residenceRegions[province]) province = '';
+    if (city && !residenceCityOptions(province).includes(city)) city = '';
+    if (district && !residenceDistrictOptions(province, city).includes(district)) district = '';
     return {
+      province,
+      city,
       district,
+      addressDetail,
       emergencyContact: String(supplement.emergencyContact || ''),
       emergencyPhone: String(supplement.emergencyPhone || '')
     };
   };
+  const formatResidenceAddress = (supplement = {}) => {
+    const item = normalizePersonalSupplement(supplement);
+    return [item.province, item.city, item.district, item.addressDetail].filter(Boolean).join('');
+  };
   window.LowAltitudeMock = {
     now,
     yinzhouStreets,
+    streetConfigs,
+    flightActivityTypes,
+    districtConfigs,
+    ningboDistricts: enabledConfigNames(districtConfigs),
+    formatNingboDistrictLabel,
+    parseNingboDistrictName,
+    residenceRegions,
+    residenceProvinceOptions,
+    residenceCityOptions,
+    residenceDistrictOptions,
+    normalizeResidenceSelection,
+    formatResidenceRegionLabel,
+    residenceRegionPathOptions,
+    parseResidenceRegionPath,
+    formatResidenceRegionPath,
+    enabledConfigNames,
     normalizePersonalSupplement,
+    formatResidenceAddress,
     profiles: {
-      personal: { label: '个人用户', name: '陈先生（演示）', idNumber: '3302**********0412', verified: '已实名认证', syncState: '已同步', license: '未上传', licenseFileName: '', phone: '138****2408', address: '鄞州区（示例地址）', devices: 2, affiliatedCompany: '鄞州云航服务有限公司（演示）', supplement: { district: '下应街道', emergencyContact: '陈女士（演示）', emergencyPhone: '139****6120' } },
+      personal: { label: '个人用户', name: '陈先生（演示）', idNumber: '3302**********0412', verified: '已实名认证', syncState: '已同步', license: '未上传', licenseFileName: '', phone: '138****2408', address: '鄞州区（示例地址）', devices: 2, affiliatedCompany: '鄞州云航服务有限公司（演示）', supplement: { province: '浙江省', city: '宁波市', district: '鄞州区', addressDetail: '下应街道示范路 128 号（演示）', emergencyContact: '陈女士（演示）', emergencyPhone: '139****6120' } },
       company: { label: '法人用户', name: '鄞州云航服务有限公司（演示）', creditCode: '9133**********8X', verified: '已认证', syncState: '已同步', supplementState: '已完善', contact: '王女士（演示）', phone: '139****1682', devices: 5, supplement: { droneUsage: '巡检、航拍影像、安防巡查服务（演示）', safetyOfficer: '周先生（演示）', safetyPhone: '137****5026' } }
     },
     companyMembers: [
@@ -113,19 +256,19 @@
       { id: 'UOM-****-19', registrationMark: 'UAS03****19', manufacturerModel: '翼龙 / 某制造商', serialNumber: 'SN-****-1107', aircraftName: '退役翼龙（演示）', emptyWeight: '1.60 kg', maxTakeoffWeight: '1.60 kg', aircraftType: '多旋翼航空器', issuedTo: '鄞州云航服务有限公司（演示）', mobilePhone: '139****1682', registrationStatus: '已注销', registrationDate: '2026-06-08', holder: '鄞州云航服务有限公司（演示）', drone: '退役翼龙（演示）', certificateImageUrl: '../../shared/assets/uom-registration-certificate.svg', state: '已注销', updated: '2026-06-08', accountRole: 'company', history: [{ time: '2026-05-20 11:16', action: '上传登记证', detail: 'OCR 识别登记证截图，自动生成设备台账（mock）' }, { time: '2026-06-08 15:40', action: '注销登记证', detail: '用户提交注销，关联设备台账同步注销（mock）' }] }
     ],
     flights: [
-      { id: 'FP-20260803-018', title: '鄞州区河道巡检与隐患复核', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-04T08:30', endAt: '2026-08-04T10:00', city: '宁波市鄞州区', street: '下应街道', purpose: '河道沿线巡检与隐患复核', time: '2026-08-04 08:30—10:00', area: '宁波市鄞州区下应街道', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '120', takeoffSite: '下应街道河道巡检起降点', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '未执行', history: [{ time: '2026-08-03 09:12', action: '新增计划', detail: '提交河道巡检飞行计划（mock）' }] },
-      { id: 'FP-20260802-011', title: '社区屋顶安全巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-05T14:00', endAt: '2026-08-05T15:30', city: '宁波市鄞州区', street: '钟公庙街道', purpose: '社区屋顶设施安全巡查', time: '2026-08-05 14:00—15:30', area: '宁波市鄞州区钟公庙街道', drone: '巡航 Mini（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '80', takeoffSite: '金色水岸社区空地', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '未执行', history: [{ time: '2026-08-02 11:20', action: '新增计划', detail: '提交社区巡查飞行计划（mock）' }] },
-      { id: 'FP-20260801-007', title: '农田灌溉设施巡检', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '自主飞行', startAt: '2026-08-06T09:00', endAt: '2026-08-06T11:00', city: '宁波市鄞州区', street: '姜山镇', purpose: '农田灌溉设施巡检', time: '2026-08-06 09:00—11:00', area: '宁波市鄞州区姜山镇', drone: '安巡 H20（演示）', operator: '王女士（演示）', operatorPhone: '139****1682', maxAltitude: '100', takeoffSite: '姜山镇田间起降场地', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-01 15:05', action: '新增计划', detail: '提交农田设施巡检计划（mock）' }] },
-      { id: 'FP-20260804-009', title: '园区安防巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-07T08:00', endAt: '2026-08-07T09:30', city: '宁波市鄞州区', street: '首南街道', purpose: '园区安防巡查', time: '2026-08-07 08:00—09:30', area: '宁波市鄞州区首南街道', drone: '云巡 S10（演示）', operator: '周先生（演示）', operatorPhone: '137****5026', maxAltitude: '90', takeoffSite: '首南园区起降点', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-04 10:20', action: '新增计划', detail: '提交园区安防巡查计划（mock）' }] },
-      { id: 'FP-20260805-014', title: '东钱湖岸线影像采集', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-08T07:30', endAt: '2026-08-08T09:00', city: '宁波市鄞州区', street: '东钱湖镇', purpose: '岸线影像采集', time: '2026-08-08 07:30—09:00', area: '宁波市鄞州区东钱湖镇', drone: '瞰界 P4（演示）', operator: '孙先生（演示）', operatorPhone: '135****4419', maxAltitude: '110', takeoffSite: '东钱湖镇岸线备降点', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-05 11:08', action: '新增计划', detail: '提交岸线影像采集计划（mock）' }] },
-      { id: 'FP-20260805-021', title: '潘火街道工地围挡巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-08T15:00', endAt: '2026-08-08T16:20', city: '宁波市鄞州区', street: '潘火街道', purpose: '工地围挡与物料堆放巡查', time: '2026-08-08 15:00—16:20', area: '宁波市鄞州区潘火街道', drone: '天目 X3（演示）', operator: '钱女士（演示）', operatorPhone: '134****7720', maxAltitude: '80', takeoffSite: '潘火街道工地旁空地', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-05 16:40', action: '新增计划', detail: '提交工地围挡巡查计划（mock）' }] },
-      { id: 'FP-20260806-003', title: '中河街道夜景照明复核', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-09T19:00', endAt: '2026-08-09T20:00', city: '宁波市鄞州区', street: '中河街道', purpose: '夜景照明效果复核', time: '2026-08-09 19:00—20:00', area: '宁波市鄞州区中河街道', drone: '安巡 H20（演示）', operator: '王女士（演示）', operatorPhone: '139****1682', maxAltitude: '70', takeoffSite: '中河街道市民广场旁', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-06 09:18', action: '新增计划', detail: '提交夜景照明复核计划（mock）' }] },
-      { id: 'FP-20260730-018', title: '邱隘镇仓储屋顶巡检', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '自主飞行', startAt: '2026-07-30T09:00', endAt: '2026-07-30T10:30', city: '宁波市鄞州区', street: '邱隘镇', purpose: '仓储屋顶设施巡检', time: '2026-07-30 09:00—10:30', area: '宁波市鄞州区邱隘镇', drone: '云巡 S10（演示）', operator: '周先生（演示）', operatorPhone: '137****5026', maxAltitude: '95', takeoffSite: '邱隘镇仓储区起降点', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '已确认执行', executedAt: '2026-07-30 10:42', history: [{ time: '2026-07-28 14:22', action: '新增计划', detail: '提交仓储屋顶巡检计划（mock）' }, { time: '2026-07-30 10:42', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
-      { id: 'FP-20260729-012', title: '下应街道绿化带航拍', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-29T13:30', endAt: '2026-07-29T14:40', city: '宁波市鄞州区', street: '下应街道', purpose: '绿化带长势航拍', time: '2026-07-29 13:30—14:40', area: '宁波市鄞州区下应街道', drone: '瞰界 P4（演示）', operator: '孙先生（演示）', operatorPhone: '135****4419', maxAltitude: '85', takeoffSite: '下应街道公园空地', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '已确认执行', executedAt: '2026-07-29 14:55', history: [{ time: '2026-07-27 10:05', action: '新增计划', detail: '提交绿化带航拍计划（mock）' }, { time: '2026-07-29 14:55', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
-      { id: 'FP-20260728-006', title: '场地巡查（演示）', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-28T14:00', endAt: '2026-07-28T15:00', city: '宁波市鄞州区', street: '首南街道', purpose: '场地巡查', time: '2026-07-28 14:00—15:00', area: '宁波市鄞州区首南街道', drone: '巡航 Mini（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '110', takeoffSite: '首南街道空旷场地', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '已确认执行', executedAt: '2026-07-28 15:20', history: [{ time: '2026-07-26 10:30', action: '新增计划', detail: '提交飞行计划（mock）' }, { time: '2026-07-27 08:45', action: '修改计划', detail: '飞行前调整飞行时间段（mock）' }, { time: '2026-07-28 15:20', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
-      { id: 'FP-20260725-003', title: '道路施工区域影像复核', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-29T07:30', endAt: '2026-07-29T09:00', city: '宁波市鄞州区', street: '东钱湖镇', purpose: '道路施工区域影像复核', time: '2026-07-29 07:30—09:00', area: '宁波市鄞州区东钱湖镇', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '90', takeoffSite: '施工区域旁备降点', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '已确认执行', executedAt: '2026-07-29 09:20', history: [{ time: '2026-07-25 10:30', action: '新增计划', detail: '提交施工区域复核计划（mock）' }, { time: '2026-07-29 09:20', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] }
+      { id: 'FP-20260803-018', title: '鄞州区河道巡检与隐患复核', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-04T08:30', endAt: '2026-08-04T10:00', city: '宁波市鄞州区', street: '下应街道', purpose: '河道沿线巡检与隐患复核', time: '2026-08-04 08:30—10:00', area: '宁波市鄞州区下应街道', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '120', takeoffSite: '下应街道', areaShot: '区域截图-下应街道.jpg', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '未执行', history: [{ time: '2026-08-03 09:12', action: '新增计划', detail: '提交河道巡检飞行计划（mock）' }] },
+      { id: 'FP-20260802-011', title: '社区屋顶安全巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-05T14:00', endAt: '2026-08-05T15:30', city: '宁波市鄞州区', street: '钟公庙街道', purpose: '社区屋顶设施安全巡查', time: '2026-08-05 14:00—15:30', area: '宁波市鄞州区钟公庙街道', drone: '巡航 Mini（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '80', takeoffSite: '钟公庙街道', areaShot: '区域截图-钟公庙街道.jpg', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '未执行', history: [{ time: '2026-08-02 11:20', action: '新增计划', detail: '提交社区巡查飞行计划（mock）' }] },
+      { id: 'FP-20260801-007', title: '农田灌溉设施巡检', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '自主飞行', startAt: '2026-08-06T09:00', endAt: '2026-08-06T11:00', city: '宁波市鄞州区', street: '姜山镇', purpose: '农田灌溉设施巡检', time: '2026-08-06 09:00—11:00', area: '宁波市鄞州区姜山镇', drone: '安巡 H20（演示）', operator: '王女士（演示）', operatorPhone: '139****1682', maxAltitude: '100', takeoffSite: '姜山镇', areaShot: '区域截图-姜山镇.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-01 15:05', action: '新增计划', detail: '提交农田设施巡检计划（mock）' }] },
+      { id: 'FP-20260804-009', title: '园区安防巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-07T08:00', endAt: '2026-08-07T09:30', city: '宁波市鄞州区', street: '首南街道', purpose: '园区安防巡查', time: '2026-08-07 08:00—09:30', area: '宁波市鄞州区首南街道', drone: '云巡 S10（演示）', operator: '周先生（演示）', operatorPhone: '137****5026', maxAltitude: '90', takeoffSite: '首南街道', areaShot: '区域截图-首南街道.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-04 10:20', action: '新增计划', detail: '提交园区安防巡查计划（mock）' }] },
+      { id: 'FP-20260805-014', title: '东钱湖岸线影像采集', activityType: '特殊飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-08T07:30', endAt: '2026-08-08T09:00', city: '宁波市鄞州区', street: '东钱湖镇', purpose: '岸线影像采集', time: '2026-08-08 07:30—09:00', area: '宁波市鄞州区东钱湖镇', drone: '瞰界 P4（演示）', operator: '孙先生（演示）', operatorPhone: '135****4419', maxAltitude: '110', takeoffSite: '东钱湖镇', areaShot: '区域截图-东钱湖镇.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-05 11:08', action: '新增计划', detail: '提交岸线影像采集计划（mock）' }] },
+      { id: 'FP-20260805-021', title: '潘火街道工地围挡巡查', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-08T15:00', endAt: '2026-08-08T16:20', city: '宁波市鄞州区', street: '潘火街道', purpose: '工地围挡与物料堆放巡查', time: '2026-08-08 15:00—16:20', area: '宁波市鄞州区潘火街道', drone: '天目 X3（演示）', operator: '钱女士（演示）', operatorPhone: '134****7720', maxAltitude: '80', takeoffSite: '潘火街道', areaShot: '区域截图-潘火街道.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-05 16:40', action: '新增计划', detail: '提交工地围挡巡查计划（mock）' }] },
+      { id: 'FP-20260806-003', title: '中河街道夜景照明复核', activityType: '特殊飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-09T19:00', endAt: '2026-08-09T20:00', city: '宁波市鄞州区', street: '中河街道', purpose: '夜景照明效果复核', time: '2026-08-09 19:00—20:00', area: '宁波市鄞州区中河街道', drone: '安巡 H20（演示）', operator: '王女士（演示）', operatorPhone: '139****1682', maxAltitude: '70', takeoffSite: '中河街道', areaShot: '区域截图-中河街道.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '未执行', history: [{ time: '2026-08-06 09:18', action: '新增计划', detail: '提交夜景照明复核计划（mock）' }] },
+      { id: 'FP-20260730-018', title: '邱隘镇仓储屋顶巡检', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '自主飞行', startAt: '2026-07-30T09:00', endAt: '2026-07-30T10:30', city: '宁波市鄞州区', street: '邱隘镇', purpose: '仓储屋顶设施巡检', time: '2026-07-30 09:00—10:30', area: '宁波市鄞州区邱隘镇', drone: '云巡 S10（演示）', operator: '周先生（演示）', operatorPhone: '137****5026', maxAltitude: '95', takeoffSite: '邱隘镇', areaShot: '区域截图-邱隘镇.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '已确认执行', executedAt: '2026-07-30 10:42', history: [{ time: '2026-07-28 14:22', action: '新增计划', detail: '提交仓储屋顶巡检计划（mock）' }, { time: '2026-07-30 10:42', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
+      { id: 'FP-20260729-012', title: '下应街道绿化带航拍', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-29T13:30', endAt: '2026-07-29T14:40', city: '宁波市鄞州区', street: '下应街道', purpose: '绿化带长势航拍', time: '2026-07-29 13:30—14:40', area: '宁波市鄞州区下应街道', drone: '瞰界 P4（演示）', operator: '孙先生（演示）', operatorPhone: '135****4419', maxAltitude: '85', takeoffSite: '下应街道', areaShot: '区域截图-下应街道.jpg', owner: '鄞州云航服务有限公司（演示）', accountRole: 'company', status: '已登记', executed: '已确认执行', executedAt: '2026-07-29 14:55', history: [{ time: '2026-07-27 10:05', action: '新增计划', detail: '提交绿化带航拍计划（mock）' }, { time: '2026-07-29 14:55', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
+      { id: 'FP-20260728-006', title: '场地巡查（演示）', activityType: '一般飞行活动', missionNature: '个人娱乐', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-28T14:00', endAt: '2026-07-28T15:00', city: '宁波市鄞州区', street: '首南街道', purpose: '场地巡查', time: '2026-07-28 14:00—15:00', area: '宁波市鄞州区首南街道', drone: '巡航 Mini（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '110', takeoffSite: '首南街道', areaShot: '区域截图-首南街道.jpg', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '已确认执行', executedAt: '2026-07-28 15:20', history: [{ time: '2026-07-26 10:30', action: '新增计划', detail: '提交飞行计划（mock）' }, { time: '2026-07-27 08:45', action: '修改计划', detail: '飞行前调整飞行时间段（mock）' }, { time: '2026-07-28 15:20', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] },
+      { id: 'FP-20260725-003', title: '道路施工区域影像复核', activityType: '一般飞行活动', missionNature: '航拍摄影', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-07-29T07:30', endAt: '2026-07-29T09:00', city: '宁波市鄞州区', street: '东钱湖镇', purpose: '道路施工区域影像复核', time: '2026-07-29 07:30—09:00', area: '宁波市鄞州区东钱湖镇', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '90', takeoffSite: '东钱湖镇', areaShot: '区域截图-东钱湖镇.jpg', owner: '陈先生（演示）', accountRole: 'personal', status: '已登记', executed: '已确认执行', executedAt: '2026-07-29 09:20', history: [{ time: '2026-07-25 10:30', action: '新增计划', detail: '提交施工区域复核计划（mock）' }, { time: '2026-07-29 09:20', action: '执行确认', detail: '用户确认已按计划执行（mock）' }] }
     ],
-    flightApprovalOcr: { title: '低空巡查飞行任务（演示）', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-02T09:00', endAt: '2026-08-02T11:00', city: '宁波市鄞州区', street: '姜山镇', purpose: '低空巡查', time: '2026-08-02 09:00—11:00', area: '宁波市鄞州区姜山镇', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '110', takeoffSite: '姜山镇巡查起降点' },
+    flightApprovalOcr: { title: '低空巡查飞行任务（演示）', activityType: '一般飞行活动', missionNature: '巡检巡查', controlMode: '视距内飞行', flightMode: '手动飞行', startAt: '2026-08-02T09:00', endAt: '2026-08-02T11:00', city: '宁波市鄞州区', street: '姜山镇', purpose: '低空巡查', time: '2026-08-02 09:00—11:00', area: '宁波市鄞州区姜山镇', drone: '云翼 M30（演示）', operator: '陈先生（演示）', operatorPhone: '138****2408', maxAltitude: '110', takeoffSite: '姜山镇', areaShot: '区域截图-姜山镇.jpg' },
     activities: [
       { id: 'ACT-01', title: '2026 年鄞州区无人机飞行安全培训', cover: 'training', summary: '面向个人飞手、企业经办人开展实名登记、飞行前检查与风险识别培训。', richText: ['本次培训围绕无人机实名登记、飞行前检查、异常情况报告和文明飞行展开。', '完成现场签到及课程学习后，可在“我的报名”中查看报名状态。'], startTime: '2026-08-08 09:00', endTime: '2026-08-08 11:30', enrollStart: '2026-07-31 09:00', enrollEnd: '2026-08-06 17:00', place: '鄞州区低空安全服务中心一楼培训室', capacity: 60, enrolled: 42, organizer: '鄞州区低空安全服务中心', contact: '服务咨询 0574-****-8612', status: '报名中', confirmState: '未确认', joined: false, enrollForm: [['报名人', '文本', '必填', '请填写报名人', ''], ['联系电话', '手机号', '必填', '请填写手机号', ''], ['备注', '文本', '选填', '选填，可补充说明', '']] },
       { id: 'ACT-02', title: '夏季低空安全宣传进社区', cover: 'community', summary: '通过案例讲解、设备展示和咨询答疑，普及安全飞行常识。', richText: ['活动设有安全飞行案例展、无人机基础知识咨询和儿童安全科普互动区。', '已报名用户请于活动开始前 15 分钟在现场服务台签到。'], startTime: '2026-08-16 14:00', endTime: '2026-08-16 16:30', enrollStart: '2026-08-01 09:00', enrollEnd: '2026-08-14 17:00', place: '钟公庙街道金色水岸社区文化礼堂', capacity: 80, enrolled: 76, organizer: '钟公庙街道办事处', contact: '活动咨询 0574-****-8096', status: '报名中', confirmState: '未确认', joined: true, enrollForm: [['报名人', '文本', '必填', '请填写报名人', ''], ['联系电话', '手机号', '必填', '请填写手机号', ''], ['备注', '文本', '选填', '选填，可补充说明', '']] },
@@ -187,7 +330,7 @@
       { id: 'TPL-CHK-01', name: '设备核查结果通知', scene: '设备核查', trigger: '后台完成设备核查并出具通过或不通过结论', channel: '系统推送', title: '设备核查结果通知', content: '您的设备「${设备名称}」（序列号 ${设备序列号}）核查结果为「${核查结果}」。处理意见：${处理意见}', variables: '设备名称、设备序列号、核查结果、处理意见', state: '已启用', updated: '2026-07-28' },
       { id: 'TPL-ACT-01', name: '活动报名成功', scene: '活动报名', trigger: '用户成功提交活动报名', channel: '系统推送', title: '活动报名成功', content: '您已成功报名「${活动名称}」，活动时间 ${活动时间}，请按时参加。', variables: '活动名称、活动时间、活动地点', state: '已启用', updated: '2026-07-25' },
       { id: 'TPL-ACT-02', name: '活动报名确认通知', scene: '活动报名', trigger: '后台对本场报名名单一键确认', channel: '系统推送', title: '活动报名已确认', content: '「${活动名称}」报名名单已确认，请按活动安排准时到场。', variables: '活动名称', state: '已启用', updated: '2026-07-25' },
-      { id: 'TPL-DRN-01', name: '无人机禁用通知', scene: '无人机管理', trigger: '后台对设备执行禁用', channel: '系统推送', title: '无人机设备已禁用', content: '您的无人机「${设备名称}」（登记标志 ${登记标志}）已被禁用，暂不可用于飞行计划申报。', variables: '设备名称、登记标志', state: '已启用', updated: '2026-07-22' },
+      { id: 'TPL-DRN-01', name: '无人机禁用通知', scene: '无人机管理', trigger: '后台对设备执行禁用（仅后台台账，不触达用户端）', channel: '系统推送', title: '无人机设备已禁用', content: '【后台内部】设备「${设备名称}」（登记标志 ${登记标志}）已加入无人机黑名单；本模板默认停用，不向用户端推送。', variables: '设备名称、登记标志', state: '已停用', updated: '2026-07-22' },
       { id: 'TPL-BLK-01', name: '账号限制通知', scene: '用户/企业管理', trigger: '后台将个人或企业账号拉入黑名单', channel: '系统推送', title: '账号状态变更通知', content: '您的账号因「${拉黑原因}」已被限制使用相关服务，如有疑问请联系管理部门。', variables: '拉黑原因', state: '已启用', updated: '2026-07-15' },
       { id: 'TPL-NEWS-01', name: '安全资讯发布提醒', scene: '内容发布', trigger: '后台发布低空安全普法或新闻公告', channel: '浙里办推送', title: '低空安全资讯更新', content: '「${内容标题}」已发布，欢迎前往低空安全普法 / 新闻公告查阅。', variables: '内容标题、内容类型', state: '已启用', updated: '2026-07-20' }
     ],
