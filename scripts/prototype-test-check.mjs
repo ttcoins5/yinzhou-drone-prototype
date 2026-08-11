@@ -167,7 +167,7 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('新增飞行计划')) errors.push('浙里办飞行计划路由失败');
   if (!['全部', '未执行', '已执行', 'data-action="flight-exec-view"'].every((item) => app.innerHTML.includes(item))) errors.push('个人飞行计划缺少执行状态筛选');
   if (app.innerHTML.includes('开始日期') || app.innerHTML.includes('结束日期') || app.innerHTML.includes('data-flight-range=')) errors.push('个人飞行计划不应提供开始/结束日期筛选');
-  if (app.innerHTML.includes('data-action="export-flights"') || (app.innerHTML.includes('>导出<') && app.innerHTML.includes('filter-bar--with-action'))) errors.push('个人飞行计划不应提供导出');
+  if (app.innerHTML.includes('data-action="export-flights"') || (app.innerHTML.includes('>导出<') && app.innerHTML.includes('flight-range-filter'))) errors.push('个人飞行计划不应提供导出');
   click({ action: 'flight-exec-view', value: '未执行' });
   if (!app.innerHTML.includes('鄞州区河道巡检与隐患复核') || app.innerHTML.includes('场地巡查')) errors.push('个人飞行计划未执行筛选失败');
   click({ action: 'flight-exec-view', value: '已执行' });
@@ -427,8 +427,8 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('已设为飞手') && !app.innerHTML.includes('已取消飞手')) errors.push('设置飞手保存反馈缺失');
   visit('#/flights');
   if (app.innerHTML.includes('新增飞行计划') || app.innerHTML.includes('批量导入') || app.innerHTML.includes('data-action="edit-flight"') || app.innerHTML.includes('data-action="execute"')) errors.push('企业飞行计划仍提供新增、导入或修改执行入口');
-  if (!['全部', '未执行', '已执行', '开始日期', '结束日期', 'data-action="flight-exec-view"', 'data-flight-range="end"', 'data-action="export-flights"', '导出'].every((item) => app.innerHTML.includes(item))) errors.push('企业飞行计划缺少执行状态、时间段筛选或导出');
-  if (!app.innerHTML.includes('filter-bar--with-action')) errors.push('企业飞行计划导出按钮未与搜索框同行');
+  if (!['全部', '未执行', '已执行', '开始日期', '结束日期', 'data-action="flight-exec-view"', 'data-flight-range="end"'].every((item) => app.innerHTML.includes(item))) errors.push('企业飞行计划缺少执行状态或时间段筛选');
+  if (app.innerHTML.includes('data-action="export-flights"') || app.innerHTML.includes('filter-bar--with-action')) errors.push('企业飞行计划不应提供导出');
   if (!app.innerHTML.includes('提交人') || !app.innerHTML.includes('王女士') || !app.innerHTML.includes('农田灌溉设施巡检')) errors.push('企业飞行计划未展示本公司计划或提交人');
   click({ action: 'flight-exec-view', value: '未执行' });
   if (!app.innerHTML.includes('农田灌溉设施巡检') || app.innerHTML.includes('邱隘镇仓储屋顶巡检')) errors.push('企业飞行计划未执行筛选失败');
@@ -440,9 +440,6 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('农田灌溉设施巡检') || app.innerHTML.includes('园区安防巡查')) errors.push('企业飞行计划时间段筛选失败');
   change({ flightRange: 'start' }, '');
   change({ flightRange: 'end' }, '');
-  click({ action: 'flight-exec-view', value: '未执行' });
-  click({ action: 'export-flights' });
-  if (!app.innerHTML.includes('已按当前筛选导出') && !app.innerHTML.includes('当前筛选无数据，已导出空表')) errors.push('企业飞行计划按筛选导出反馈缺失');
   click({ action: 'flight-exec-view', value: 'all' });
   visit('#/detail/flight/FP-20260801-007');
   if (!app.innerHTML.includes('农田灌溉设施巡检') || !app.innerHTML.includes('提交人') || app.innerHTML.includes('修改计划') || app.innerHTML.includes('确认执行') || app.innerHTML.includes('变更记录') || app.innerHTML.includes('鄞州区河道巡检与隐患复核')) errors.push('法人用户飞行计划详情未按角色隔离、只读查看或展示不符合要求');

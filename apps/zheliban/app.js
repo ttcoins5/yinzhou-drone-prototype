@@ -714,36 +714,6 @@
     return true;
   };
   const filteredFlights = () => roleFlights().filter((x) => matchesFlightFilters(x) && match(`${x.title}${x.missionNature || ''}${x.purpose || ''}${x.operator || ''}`));
-  const escapeExcelCell = (value) => String(value ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const downloadFlightExcel = (rows) => {
-    const company = state.role === 'company';
-    const headers = company
-      ? ['计划编号', '计划名称', '飞行活动类型', '任务性质', '预计开始时间', '预计结束时间', '飞行区域', '起飞地', '飞行设备', '提交人', '执行状态']
-      : ['计划编号', '计划名称', '飞行活动类型', '任务性质', '预计开始时间', '预计结束时间', '飞行区域', '起飞地', '飞行设备', '通信联络人', '执行状态'];
-    const tableRows = rows.map((item) => {
-      const start = item.startAt ? item.startAt.replace('T', ' ') : (String(item.time || '').split('—')[0] || '—');
-      const end = item.endAt ? item.endAt.replace('T', ' ') : '—';
-      const cells = company
-        ? [item.id, item.title, item.activityType, item.missionNature || item.purpose, start, end, flightArea(item), item.takeoffSite, item.drone, displayCompanyName(item.operator || '—'), item.executed]
-        : [item.id, item.title, item.activityType, item.missionNature || item.purpose, start, end, flightArea(item), item.takeoffSite, item.drone, item.operator, item.executed];
-      return `<tr>${cells.map((cell) => `<td>${escapeExcelCell(cell || '—')}</td>`).join('')}</tr>`;
-    }).join('');
-    const html = `${String.fromCharCode(0xFEFF)}<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>飞行计划</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table><thead><tr>${headers.map((header) => `<th>${escapeExcelCell(header)}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
-    const stamp = String(data.now || 'export').replaceAll('-', '');
-    const fileName = `飞行计划导出_${stamp}.xls`;
-    if (typeof Blob === 'function' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && typeof document?.createElement === 'function') {
-      const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      link.rel = 'noopener';
-      document.body?.appendChild?.(link);
-      link.click();
-      link.remove?.();
-      setTimeout(() => { try { URL.revokeObjectURL(link.href); } catch {} }, 1200);
-    }
-    return { count: rows.length, fileName };
-  };
   const flights = () => {
     const company = state.role === 'company';
     const actionButtons = company ? '' : `<button class="primary-btn" data-action="open-flight-create">新增飞行计划</button><button class="secondary-btn" data-action="open-batch">批量导入</button>`;
@@ -752,9 +722,7 @@
     const rangeFilter = company
       ? `<div class="flight-range-filter" aria-label="时间段筛选"><label><span>开始日期</span><input type="date" data-flight-range="start" value="${safe(state.flightRangeStart || '')}" /></label><label><span>结束日期</span><input type="date" data-flight-range="end" value="${safe(state.flightRangeEnd || '')}" /></label></div>`
       : '';
-    const searchBar = company
-      ? `<div class="filter-bar filter-bar--with-action"><input id="search" value="${safe(state.query)}" placeholder="${searchHint}" aria-label="搜索" /><button type="button" class="secondary-btn" data-action="export-flights">导出</button></div>`
-      : filter(searchHint);
+    const searchBar = filter(searchHint);
     const rows = filteredFlights();
     return shell(`${pageToolbar('home', execTabs)}${rangeFilter}${searchBar}${listActions(actionButtons)}${list(rows, (x) => {
       const submitter = displayCompanyName(x.operator || '—');
@@ -1818,13 +1786,6 @@
     if (action === 'flight-exec-view') {
       state.flightExecView = target.dataset.value || 'all';
       announce(state.flightExecView === 'all' ? '已显示全部飞行计划' : `已筛选${state.flightExecView}计划`);
-    }
-    if (action === 'export-flights') {
-      if (state.role !== 'company') { announce('个人账号不支持导出飞行计划'); return; }
-      const rows = filteredFlights();
-      const result = downloadFlightExcel(rows);
-      announce(rows.length ? `已按当前筛选导出 ${result.count} 条飞行计划` : '当前筛选无数据，已导出空表');
-      return;
     }
     if (action === 'article-kind') { state.articleKind = target.dataset.value; announce(`已筛选${target.textContent}`); }
     if (action === 'activity-filter') { state.mineActivities = !state.mineActivities; announce(state.mineActivities ? '已仅显示我的报名' : '已显示全部活动'); }
