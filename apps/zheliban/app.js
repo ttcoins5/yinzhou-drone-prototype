@@ -416,16 +416,27 @@
   };
   const flightPlanWindowMs = 48 * 60 * 60 * 1000;
   const flightDurationMaxMs = 24 * 60 * 60 * 1000;
+  const pad2 = (n) => String(n).padStart(2, '0');
   const flightPlanTimeMin = () => toDateTimeLocal(new Date());
   const flightPlanTimeMax = () => toDateTimeLocal(new Date(Date.now() + flightPlanWindowMs));
+  const flightPlanWindowDayKey = (ms) => {
+    const date = new Date(ms);
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  };
+  const flightPlanLastDayKey = () => flightPlanWindowDayKey(new Date(flightPlanTimeMax()).getTime());
+  const flightPlanDayEndMs = (dayKey) => new Date(`${dayKey}T23:59`).getTime();
   const parseFlightDateTime = (value) => {
     if (!value) return null;
     const date = new Date(String(value).replace(' ', 'T'));
     return Number.isNaN(date.getTime()) ? null : date;
   };
-  const isWithinFlightPlanWindow = (value) => {
+  const isWithinFlightPlanWindow = (value, field = 'startAt') => {
     const picked = parseFlightDateTime(value);
     if (!picked) return false;
+    if (field === 'endAt') {
+      const { minMs, maxMs } = flightTimeBoundsForField('endAt');
+      return picked.getTime() >= minMs && picked.getTime() <= maxMs;
+    }
     const min = new Date(flightPlanTimeMin()).getTime();
     const max = new Date(flightPlanTimeMax()).getTime();
     return picked.getTime() >= min && picked.getTime() <= max;
@@ -437,7 +448,6 @@
     const diff = end.getTime() - start.getTime();
     return diff >= 0 && diff <= flightDurationMaxMs;
   };
-  const pad2 = (n) => String(n).padStart(2, '0');
   const formatFlightTimeLabel = (value) => {
     const date = parseFlightDateTime(value);
     if (!date) return '';
@@ -449,7 +459,10 @@
     if (field === 'endAt') {
       const start = parseFlightDateTime(state.flightDraft.startAt);
       const endMinMs = Math.max(timeMin, start ? start.getTime() : timeMin);
-      const endMaxMs = Math.min(timeMax, start ? start.getTime() + flightDurationMaxMs : timeMax);
+      let endMaxMs = Math.min(timeMax, start ? start.getTime() + flightDurationMaxMs : timeMax);
+      if (start && flightPlanWindowDayKey(start.getTime()) === flightPlanLastDayKey()) {
+        endMaxMs = Math.min(flightPlanDayEndMs(flightPlanLastDayKey()), start.getTime() + flightDurationMaxMs);
+      }
       return { minMs: endMinMs, maxMs: Math.max(endMinMs, endMaxMs) };
     }
     return { minMs: timeMin, maxMs: timeMax };
@@ -1004,10 +1017,53 @@
     fn();
     if (main) main.scrollTop = top;
   };
-  const scrollPickerColumnToActive = (col) => {
-    const active = col.querySelector('.region-picker-item.is-active');
-    if (!active) return;
-    col.scrollTop = Math.max(0, active.offsetTop - (col.clientHeight - active.offsetHeight) / 2);
+  let flightTimePickerProgrammaticScroll = false;
+  let flightTimePickerScrollTimer = 0;
+  const scrollPickerColumnToItem = (col, item, { behavior = 'auto' } = {}) => {
+    if (!col || !item) return;
+    const target = Math.max(0, item.offsetTop - (col.clientHeight - item.offsetHeight) / 2);
+    if (Math.abs(col.scrollTop - target) < 1) return;
+    flightTimePickerProgrammaticScroll = true;
+    if (behavior === 'smooth' && typeof col.scrollTo === 'function') col.scrollTo({ top: target, behavior: 'smooth' });
+    else col.scrollTop = target;
+    window.setTimeout(() => { flightTimePickerProgrammaticScroll = false; }, behavior === 'smooth' ? 320 : 0);
+  };
+  const scrollPickerColumnToActive = (col, behavior = 'auto') => {
+    scrollPickerColumnToItem(col, col?.querySelector('.region-picker-item.is-active'), { behavior });
+  };
+  const flightTimePickerCenterItem = (col) => {
+    const items = [...(col?.querySelectorAll('.region-picker-item') || [])];
+    if (!items.length) return null;
+    const center = col.scrollTop + col.clientHeight / 2;
+    return items.reduce((best, item) => {
+      const dist = Math.abs(item.offsetTop + item.offsetHeight / 2 - center);
+      return !best || dist < best.dist ? { item, dist } : best;
+    }, null)?.item || null;
+  };
+  const syncFlightTimePickerFromColumnScroll = (col) => {
+    if (!state.flightTimePicker || flightTimePickerProgrammaticScroll) return;
+    const level = col?.dataset?.pickerLevel;
+    const centered = flightTimePickerCenterItem(col);
+    if (!level || !centered) return;
+    const value = centered.dataset.value || '';
+    const next = { ...state.flightTimePicker };
+    if (level === 'date') next.date = value;
+    if (level === 'hour') next.hour = value;
+    if (level === 'minute') next.minute = value;
+    const clamped = clampFlightTimeDraft(next, next.field);
+    const changed = clamped.date !== state.flightTimePicker.date
+      || clamped.hour !== state.flightTimePicker.hour
+      || clamped.minute !== state.flightTimePicker.minute;
+    state.flightTimePicker = clamped;
+    if (changed) patchFlightTimePickerWheel({ scrollLevels: ['date', 'hour', 'minute'] });
+    else {
+      col.querySelectorAll('.region-picker-item').forEach((btn) => {
+        const active = btn.dataset.value === value;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      scrollPickerColumnToItem(col, centered);
+    }
   };
   const scrollPickerColumnsToActive = (root) => {
     const scope = root || app.querySelector('[data-flight-time-overlay]');
@@ -1016,15 +1072,17 @@
       scope.querySelectorAll('.region-picker-col').forEach(scrollPickerColumnToActive);
     });
   };
-  const patchFlightTimePickerWheel = () => {
+  const patchFlightTimePickerWheel = ({ scrollLevels = null, scrollBehavior = 'auto' } = {}) => {
     const host = app.querySelector('[data-flight-time-overlay]');
     if (!host || !state.flightTimePicker) return false;
     const parts = clampFlightTimeDraft(state.flightTimePicker, state.flightTimePicker.field);
     state.flightTimePicker = parts;
+    const shouldScroll = (level) => !scrollLevels || scrollLevels.includes(level);
     const layer = host.querySelector('.flight-time-picker-layer');
     if (!layer) {
       preserveMainScroll(() => {
         host.innerHTML = flightTimePicker();
+        bindFlightTimePickerScroll();
         scrollPickerColumnsToActive(host);
       });
       return true;
@@ -1046,13 +1104,30 @@
             btn.classList.toggle('is-active', active);
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
           });
+          if (shouldScroll(level)) {
+            requestAnimationFrame(() => scrollPickerColumnToActive(col, scrollBehavior));
+          }
           return;
         }
         col.innerHTML = flightTimePickerColHtml(level, items, selected, format);
-        scrollPickerColumnToActive(col);
+        if (shouldScroll(level)) {
+          requestAnimationFrame(() => scrollPickerColumnToActive(col, scrollBehavior));
+        }
       });
+      bindFlightTimePickerScroll();
     });
     return true;
+  };
+  const bindFlightTimePickerScroll = () => {
+    app.querySelectorAll('[data-flight-time-overlay] .region-picker-col[data-picker-level]').forEach((col) => {
+      if (col.dataset.flightTimeScrollBound === '1') return;
+      col.dataset.flightTimeScrollBound = '1';
+      col.addEventListener('scroll', () => {
+        if (flightTimePickerProgrammaticScroll) return;
+        window.clearTimeout(flightTimePickerScrollTimer);
+        flightTimePickerScrollTimer = window.setTimeout(() => syncFlightTimePickerFromColumnScroll(col), 120);
+      }, { passive: true });
+    });
   };
   const syncFlightTimeTriggers = () => {
     app.querySelectorAll('[data-action="open-flight-time"]').forEach((btn) => {
@@ -1070,7 +1145,10 @@
     preserveMainScroll(() => {
       host.innerHTML = state.flightTimePicker ? flightTimePicker() : '';
       syncFlightTimeTriggers();
-      if (state.flightTimePicker) scrollPickerColumnsToActive(host);
+      if (state.flightTimePicker) {
+        bindFlightTimePickerScroll();
+        scrollPickerColumnsToActive(host);
+      }
     });
     return true;
   };
@@ -1366,7 +1444,7 @@
       if (state.role === 'company') { state.modal = null; announce('企业账号仅可查看本公司飞行计划'); return; }
       const form = document.querySelector('#prototype-form'); if (form && !form.reportValidity()) return;
       const draft = state.flightDraft;
-      if (!isWithinFlightPlanWindow(draft.startAt) || !isWithinFlightPlanWindow(draft.endAt)) {
+      if (!isWithinFlightPlanWindow(draft.startAt)) {
         announce('飞行计划时间只能选择当前时刻起未来 48 小时内');
         return;
       }
@@ -1382,6 +1460,10 @@
       }
       if (!isFlightSpanWithin24Hours(draft.startAt, draft.endAt)) {
         announce('预计结束时间与开始时间相差不能超过 24 小时');
+        return;
+      }
+      if (!isWithinFlightPlanWindow(draft.endAt, 'endAt')) {
+        announce('飞行计划时间只能选择当前时刻起未来 48 小时内');
         return;
       }
       if (state.areaShot !== 'done') { announce('请上传飞行区域截图'); return; }
@@ -1515,7 +1597,7 @@
       if (level === 'hour') next.hour = value;
       if (level === 'minute') next.minute = value;
       state.flightTimePicker = clampFlightTimeDraft(next, next.field);
-      if (!patchFlightTimePickerWheel()) render();
+      if (!patchFlightTimePickerWheel({ scrollLevels: [level], scrollBehavior: 'smooth' })) render();
       return;
     }
     if (action === 'confirm-flight-time') {
@@ -1534,11 +1616,14 @@
         const start = parseFlightDateTime(value);
         const end = parseFlightDateTime(state.flightDraft.endAt);
         if (start && end && end.getTime() < start.getTime()) {
-          const adjusted = Math.min(start.getTime() + 60 * 60 * 1000, start.getTime() + flightDurationMaxMs, new Date(flightPlanTimeMax()).getTime());
+          const endBounds = flightTimeBoundsForField('endAt');
+          const adjusted = Math.min(start.getTime() + 60 * 60 * 1000, endBounds.maxMs);
           state.flightDraft.endAt = toDateTimeLocal(new Date(adjusted));
           adjustToast = '预计结束时间已随开始时间调整';
         } else if (start && end && end.getTime() - start.getTime() > flightDurationMaxMs) {
-          state.flightDraft.endAt = toDateTimeLocal(new Date(start.getTime() + flightDurationMaxMs));
+          const endBounds = flightTimeBoundsForField('endAt');
+          const adjusted = Math.min(start.getTime() + flightDurationMaxMs, endBounds.maxMs);
+          state.flightDraft.endAt = toDateTimeLocal(new Date(adjusted));
           adjustToast = '预计结束时间已按开始时间起 24 小时内自动调整';
         }
       }
