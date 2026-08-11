@@ -133,7 +133,15 @@
   const persistLedger = () => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(ledgerStorageKey) || '{}');
-      window.localStorage.setItem(ledgerStorageKey, JSON.stringify({ ...saved, certificates: data.certificates, drones: data.drones }));
+      const drones = (data.drones || []).map((drone) => {
+        const next = { ...drone };
+        delete next.manageState;
+        if (next.status === '已禁用' || next.status === '已拉黑') {
+          next.status = (next.registrationStatus === '已注销' || next.status === '已注销') ? '已注销' : (next.certificate ? '有效' : '待关联');
+        }
+        return next;
+      });
+      window.localStorage.setItem(ledgerStorageKey, JSON.stringify({ ...saved, certificates: data.certificates, drones }));
     } catch {
     }
   };
@@ -178,7 +186,10 @@
       syncFlightConfigLists();
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
-  const normalizeMessageTemplates = (templates) => templates.map((item) => ({
+  const removedMessageTemplateIds = new Set(['TPL-CHK-01', 'TPL-DRN-01', 'TPL-BLK-01']);
+  const normalizeMessageTemplates = (templates) => templates
+    .filter((item) => item && !removedMessageTemplateIds.has(item.id))
+    .map((item) => ({
     ...item,
     id: item.id || '',
     name: item.name || item.title || '',
@@ -191,7 +202,9 @@
     state: item.state === '已停用' ? '已停用' : '已启用',
     updated: item.updated || data.now
   }));
-  const normalizeMessages = (messages) => messages.map((item) => ({
+  const normalizeMessages = (messages) => messages
+    .filter((item) => item && !removedMessageTemplateIds.has(item.templateId) && item.id !== 'MSG-04')
+    .map((item) => ({
     ...item,
     title: item.title || '',
     content: item.content || '',
@@ -1491,7 +1504,7 @@ if (type === 'activity-confirm') {
       const row = rowsFor(key).find((entry) => entry.id === state.modal.item);
       const displayName = row?.name || (key === 'users' ? data.profiles.personal.name : key === 'companies' ? data.profiles.company.name : '该对象');
       const body = `<form class="form-stack" id="admin-form"><label>拉黑原因<textarea required data-draft-field="reason" rows="4" placeholder="请填写拉黑原因">${safe(state.draft.reason || '')}</textarea></label></form>`;
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认拉黑</h2><p>确认对“${safe(displayName)}”执行拉黑？</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-blacklist">确认拉黑</button></div></section></div>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认拉黑</h2><p>确认对“${safe(displayName)}”执行拉黑？拉黑仅后台台账，浙里办用户端无感，不展示禁用或限制状态。</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-blacklist">确认拉黑</button></div></section></div>`;
     }
     if (type === 'unblacklist-confirm') {
       const isDrone = state.modal.key === 'drone-blacklist';
@@ -1508,7 +1521,7 @@ if (type === 'activity-confirm') {
       const row = data.drones.find((entry) => entry.id === state.modal.item);
       const label = row ? (data.uomValue(row, 'aircraftName') || row.aircraftName || row.drone || state.modal.item) : state.modal.item;
       const body = `<form class="form-stack" id="admin-form"><label>拉黑原因<textarea required data-draft-field="reason" rows="3" placeholder="请填写禁用/拉黑原因">${safe(state.draft.reason || '')}</textarea></label></form>`;
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认禁用设备</h2><p>确认对“${safe(label)}”执行禁用设备？</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-drone-disable">确认</button></div></section></div>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">确认禁用设备</h2><p>确认对“${safe(label)}”执行禁用设备？禁用仅写入后台管理状态与无人机黑名单，浙里办用户端无感。</p>${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="danger-btn" data-action="submit-drone-disable">确认</button></div></section></div>`;
     }
     if (type === 'confirm') {
       const confirmRows = state.modal.key ? rowsFor(state.modal.key) : [];

@@ -327,18 +327,14 @@
       { id: 'TPL-FP-02', name: '飞行计划执行确认提醒', scene: '飞行计划', trigger: '计划预计开始时间临近且仍为未执行', channel: '系统推送', title: '飞行计划执行确认提醒', content: '您的飞行计划「${计划名称}」即将到达预计开始时间（${预计开始时间}），请在执行后及时完成确认。', variables: '计划名称、预计开始时间', state: '已启用', updated: '2026-07-20' },
       { id: 'TPL-UOM-01', name: '登记证信息归集成功', scene: 'UOM 登记证', trigger: '用户上传登记证并 OCR 归集成功', channel: '系统推送', title: '登记证信息归集成功提醒', content: '您的 UOM 登记证「${登记标志}」信息已归集成功，可在登记证管理中查看。', variables: '登记标志、产品名称', state: '已启用', updated: '2026-07-18' },
       { id: 'TPL-UOM-02', name: '登记证注销通知', scene: 'UOM 登记证', trigger: '用户或后台完成登记证注销', channel: '系统推送', title: '登记证已注销通知', content: '您的 UOM 登记证「${登记标志}」已注销，关联无人机不可再用于飞行计划申报。', variables: '登记标志', state: '已启用', updated: '2026-07-18' },
-      { id: 'TPL-CHK-01', name: '设备核查结果通知', scene: '设备核查', trigger: '后台完成设备核查并出具通过或不通过结论', channel: '系统推送', title: '设备核查结果通知', content: '您的设备「${设备名称}」（序列号 ${设备序列号}）核查结果为「${核查结果}」。处理意见：${处理意见}', variables: '设备名称、设备序列号、核查结果、处理意见', state: '已启用', updated: '2026-07-28' },
       { id: 'TPL-ACT-01', name: '活动报名成功', scene: '活动报名', trigger: '用户成功提交活动报名', channel: '系统推送', title: '活动报名成功', content: '您已成功报名「${活动名称}」，活动时间 ${活动时间}，请按时参加。', variables: '活动名称、活动时间、活动地点', state: '已启用', updated: '2026-07-25' },
       { id: 'TPL-ACT-02', name: '活动报名确认通知', scene: '活动报名', trigger: '后台对本场报名名单一键确认', channel: '系统推送', title: '活动报名已确认', content: '「${活动名称}」报名名单已确认，请按活动安排准时到场。', variables: '活动名称', state: '已启用', updated: '2026-07-25' },
-      { id: 'TPL-DRN-01', name: '无人机禁用通知', scene: '无人机管理', trigger: '后台对设备执行禁用（仅后台台账，不触达用户端）', channel: '系统推送', title: '无人机设备已禁用', content: '【后台内部】设备「${设备名称}」（登记标志 ${登记标志}）已加入无人机黑名单；本模板默认停用，不向用户端推送。', variables: '设备名称、登记标志', state: '已停用', updated: '2026-07-22' },
-      { id: 'TPL-BLK-01', name: '账号限制通知', scene: '用户/企业管理', trigger: '后台将个人或企业账号拉入黑名单', channel: '系统推送', title: '账号状态变更通知', content: '您的账号因「${拉黑原因}」已被限制使用相关服务，如有疑问请联系管理部门。', variables: '拉黑原因', state: '已启用', updated: '2026-07-15' },
       { id: 'TPL-NEWS-01', name: '安全资讯发布提醒', scene: '内容发布', trigger: '后台发布低空安全普法或新闻公告', channel: '浙里办推送', title: '低空安全资讯更新', content: '「${内容标题}」已发布，欢迎前往低空安全普法 / 新闻公告查阅。', variables: '内容标题、内容类型', state: '已启用', updated: '2026-07-20' }
     ],
     messages: [
       { id: 'MSG-01', templateId: 'TPL-FP-01', title: '飞行计划信息待补充', content: '您有一条飞行计划「东钱湖巡检演练」信息待补充，请尽快完善后重新提交。', channel: '系统推送', time: '今天 09:20', state: '已推送', read: false },
       { id: 'MSG-02', templateId: 'TPL-ACT-01', title: '活动报名成功', content: '您已成功报名「2026 年鄞州区无人机飞行安全培训」，活动时间 2026-08-12 09:00，请按时参加。', channel: '系统推送', time: '昨天 15:30', state: '已推送', read: true },
       { id: 'MSG-03', templateId: 'TPL-UOM-01', title: '登记证信息归集成功提醒', content: '您的 UOM 登记证「UAS03****81」信息已归集成功，可在登记证管理中查看。', channel: '系统推送', time: '07-22 10:06', state: '已推送', read: true },
-      { id: 'MSG-04', templateId: 'TPL-CHK-01', title: '设备核查结果通知', content: '您的设备「云翼 M30」（序列号 SN-****-0192）核查结果为「通过」。处理意见：证照与机体一致，予以通过。', channel: '系统推送', time: '07-29 16:40', state: '已推送', read: true },
       { id: 'MSG-05', templateId: 'TPL-NEWS-01', title: '低空安全资讯更新', content: '「夏季低空飞行安全提示」已发布，欢迎前往低空安全普法 / 新闻公告查阅。', channel: '浙里办推送', time: '07-20 09:00', state: '已推送', read: true }
     ],
     users: [

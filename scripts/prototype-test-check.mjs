@@ -400,6 +400,9 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('安巡 H20') || app.innerHTML.includes('旧设备（演示）')) errors.push('企业无人机未注销筛选失败');
   click({ action: 'detail', kind: 'drone', id: 'DR-003' });
   if (!app.innerHTML.includes('分配飞手') || !app.innerHTML.includes('分配给飞手') && !app.innerHTML.includes('重新分配飞手')) errors.push('企业无人机详情缺少分配飞手入口');
+  if (['已禁用', '管理状态', '已拉黑', 'manageState'].some((text) => app.innerHTML.includes(text))) errors.push('用户端无人机详情不应展示后台拉黑/禁用状态');
+  visit('#/drones');
+  if (['已禁用', '管理状态', '已拉黑'].some((text) => app.innerHTML.includes(text))) errors.push('用户端无人机列表不应展示后台拉黑/禁用状态');
   click({ action: 'unassign-drone', id: 'DR-003' });
   if (!app.innerHTML.includes('未分配') || !app.innerHTML.includes('使用设备已减少') && !app.innerHTML.includes('已取消分配')) errors.push('企业取消分配飞手失败');
   click({ action: 'modal', modal: 'assign-pilot', id: 'DR-003' });
@@ -571,7 +574,7 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (app.innerHTML.includes('反制接口状态')) errors.push('后台仍展示建设方案范围外的反制接口');
   visit('#/drones');
   click({ action: 'request-change', key: 'drones', id: 'DR-001' });
-  if (!app.innerHTML.includes('确认禁用设备') || !app.innerHTML.includes('云翼 M30') || app.innerHTML.includes('“DR-001”')) errors.push('后台禁用确认弹窗应展示设备名称而非编号');
+  if (!app.innerHTML.includes('确认禁用设备') || !app.innerHTML.includes('云翼 M30') || app.innerHTML.includes('“DR-001”') || !app.innerHTML.includes('用户端无感')) errors.push('后台禁用确认弹窗应展示设备名称、用户端无感说明，而非编号');
   if (!app.innerHTML.includes('拉黑原因') || !app.innerHTML.includes('data-draft-field="reason"') || !app.innerHTML.includes('submit-drone-disable')) errors.push('后台禁用设备应填写拉黑原因');
   inputDraft('reason', '测试禁用拉黑原因');
   click({ action: 'submit-drone-disable' });
@@ -607,8 +610,9 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (app.innerHTML.includes('常用飞行区域') || app.innerHTML.includes('timeline-note') || app.innerHTML.includes('字段口径待业务确认，与用户端同屏展示')) errors.push('后台用户详情主区不应展示旧补充字段或口径说明条');
   if (app.innerHTML.includes('编辑个人信息') || app.innerHTML.includes('data-go="form/users/')) errors.push('后台用户详情仍展示编辑入口');
   click({ action: 'request-change', key: 'users', id: 'USR-001' });
-  if (!app.innerHTML.includes('确认拉黑') || !app.innerHTML.includes('确认对“陈先生') || !app.innerHTML.includes('拉黑原因') || !app.innerHTML.includes('data-draft-field="reason"') || !app.innerHTML.includes('data-action="submit-blacklist"')) errors.push('后台用户拉黑弹窗未按用户名确认文案或缺少必填拉黑原因');
+  if (!app.innerHTML.includes('确认拉黑') || !app.innerHTML.includes('确认对“陈先生') || !app.innerHTML.includes('拉黑原因') || !app.innerHTML.includes('data-draft-field="reason"') || !app.innerHTML.includes('data-action="submit-blacklist"') || !app.innerHTML.includes('用户端无感')) errors.push('后台用户拉黑弹窗未按用户名确认文案、缺少必填拉黑原因或未提示用户端无感');
   if (app.innerHTML.includes('确认对“USR-001”')) errors.push('拉黑弹窗仍使用编号而非用户名');
+  if (!app.innerHTML.includes('浙里办用户端无感') && !app.innerHTML.includes('用户端无感')) errors.push('右侧页面说明未写明用户拉黑仅后台、用户端无感');
   inputDraft('reason', '违规飞行治理');
   click({ action: 'submit-blacklist' });
   if (!app.innerHTML.includes('已拉黑')) errors.push('后台用户拉黑提交反馈缺失');
@@ -797,7 +801,8 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (!app.innerHTML.includes('保存排序') || !app.innerHTML.includes('展开/折叠') || !app.innerHTML.includes('组件路径') || !app.innerHTML.includes('意见反馈管理') || !app.innerHTML.includes('系统管理')) errors.push('系统管理菜单树表未对齐');
   visit('#/messages');
   if (!app.innerHTML.includes('消息模板') || !['模板编号', '模板名称', '业务场景', '触达渠道', '启用状态'].every((field) => app.innerHTML.includes(field))) errors.push('后台消息模板列表字段不正确');
-  if (!['飞行计划信息待补充', '设备核查结果通知', '活动报名成功', '登记证信息归集成功'].every((name) => app.innerHTML.includes(name))) errors.push('后台消息模板未按系统业务场景预置');
+  if (!['飞行计划信息待补充', '活动报名成功', '登记证信息归集成功', '安全资讯发布提醒'].every((name) => app.innerHTML.includes(name))) errors.push('后台消息模板未按系统业务场景预置');
+  if (['设备核查结果通知', '无人机禁用通知', '账号限制通知', 'TPL-CHK-01', 'TPL-DRN-01', 'TPL-BLK-01'].some((name) => app.innerHTML.includes(name))) errors.push('后台消息模板仍保留已移除的核查/禁用/拉黑通知');
   if (app.innerHTML.includes('>新建消息<') || app.innerHTML.includes('推送消息') || app.innerHTML.includes('新建用户消息') || app.innerHTML.includes('data-go="form/messages/new"')) errors.push('消息管理仍保留人工新建或主动推送入口');
   if (!app.innerHTML.includes('toggle-message-template')) errors.push('消息模板缺少启用/停用操作');
   visit('#/detail/messages/TPL-FP-01');

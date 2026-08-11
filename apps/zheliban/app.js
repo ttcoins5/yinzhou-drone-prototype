@@ -104,6 +104,8 @@
     return '有效';
   };
   const normalizeDrone = (drone) => {
+    delete drone.manageState;
+    if (drone.status === '已禁用' || drone.status === '已拉黑') drone.status = '有效';
     drone.group = drone.group === '使用设备' ? '使用设备' : '持有设备';
     const reg = droneRegistrationState(drone);
     if (reg === '已注销') {
@@ -309,7 +311,10 @@
       if (Array.isArray(saved.districtConfigs)) data.districtConfigs = saved.districtConfigs;
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
-  const normalizeMessages = (messages) => messages.map((item) => ({
+  const removedMessageTemplateIds = new Set(['TPL-CHK-01', 'TPL-DRN-01', 'TPL-BLK-01']);
+  const normalizeMessages = (messages) => messages
+    .filter((item) => item && !removedMessageTemplateIds.has(item.templateId) && item.id !== 'MSG-04' && item.title !== '设备核查结果通知')
+    .map((item) => ({
     ...item,
     title: item.title || '',
     content: item.content || '',
