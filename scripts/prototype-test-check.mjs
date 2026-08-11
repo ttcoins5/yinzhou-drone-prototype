@@ -180,11 +180,24 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   click({ action: 'modal', modal: 'flight' });
   if (app.innerHTML.includes('自主申报与执行确认') || !['飞行活动类型', '任务性质', '操控模式', '飞行模式', '预计开始时间', '预计结束时间', '通信联络方式', '最大飞行高度', '起飞地', '宁波市鄞州区', '请选择市区', 'data-flight-field="city"', '请填写飞行区域', '以UOM平台审批为准', 'required-mark', 'flight-area-file'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('起降备降场地') || app.innerHTML.includes('请填写飞行区域说明') || app.innerHTML.includes('<span>宁波市鄞州区</span>')) errors.push('浙里办飞行计划字段未与 UOM 申请信息口径对齐');
   if (!app.innerHTML.includes('form-disclaimer') || !app.innerHTML.includes('form-disclaimer-mark')) errors.push('飞行计划表单 UOM 审批提示未强调展示');
-  if (!app.innerHTML.includes('上传飞行区域截图') || !app.innerHTML.includes('请选择街道') || !app.innerHTML.includes('datetime-local') || !app.innerHTML.includes('min=') || !app.innerHTML.includes('max=') || !app.innerHTML.includes('一般飞行活动') || !app.innerHTML.includes('特殊飞行活动') || !app.innerHTML.includes('钟公庙街道') || !app.innerHTML.includes('宁波市海曙区')) errors.push('浙里办飞行计划未支持区域截图、市区配置下拉、起飞地街道、活动类型配置项或时间上下限（当前起 48 小时）');
+  if (!app.innerHTML.includes('上传飞行区域截图') || !app.innerHTML.includes('请选择街道') || !app.innerHTML.includes('data-action="open-flight-time"') || !app.innerHTML.includes('datetime-trigger') || !app.innerHTML.includes('一般飞行活动') || !app.innerHTML.includes('特殊飞行活动') || !app.innerHTML.includes('钟公庙街道') || !app.innerHTML.includes('宁波市海曙区')) errors.push('浙里办飞行计划未支持区域截图、市区配置下拉、起飞地街道、活动类型配置项或时间选择入口');
+  click({ action: 'open-flight-time', field: 'startAt' });
+  if (!app.innerHTML.includes('flight-time-picker-layer') || !app.innerHTML.includes('选择预计开始时间') || !app.innerHTML.includes('data-action="confirm-flight-time"')) errors.push('飞行计划开始时间底部选择器未打开');
+  click({ action: 'confirm-flight-time' });
+  if (!app.innerHTML.match(/datetime-trigger(?![^>]*is-placeholder)[^>]*>[\s\S]*?\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)) errors.push('确认开始时间后未回填到表单');
   setValidity(false);
   click({ action: 'submit-modal' });
   if (!app.innerHTML.includes('role="dialog"')) errors.push('浙里办表单校验失败状态未保留');
   setValidity(true);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const toLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const startOver = toLocal(new Date(now.getTime() + 60 * 60 * 1000));
+  const endOver = toLocal(new Date(now.getTime() + 26 * 60 * 60 * 1000));
+  change({ flightField: 'startAt' }, startOver);
+  change({ flightField: 'endAt' }, endOver);
+  click({ action: 'submit-flight' });
+  if (!app.innerHTML.includes('相差不能超过 24 小时')) errors.push('飞行计划未限制结束与开始相差不超过 24 小时');
   click({ action: 'close-modal' });
   click({ action: 'execute', id: 'FP-20260803-018' });
   if (!app.innerHTML.includes('确认执行飞行计划？') || !app.innerHTML.includes('data-action="confirm-execute"')) errors.push('浙里办执行确认弹窗缺失');
@@ -654,6 +667,7 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (app.innerHTML.includes('data-modal="edit"') || app.innerHTML.includes('编辑登记信息') || app.innerHTML.includes('data-go="form/drones/')) errors.push('后台无人机详情仍展示编辑入口');
   visit('#/flights');
   if (!app.innerHTML.includes('任务性质') || !app.innerHTML.includes('飞行设备') || !app.innerHTML.includes('执行状态')) errors.push('后台飞行计划列表未展示用户端对齐字段');
+  if (!app.innerHTML.includes('相差不能超过 24 小时') || !app.innerHTML.includes('未来 48 小时')) errors.push('后台飞行计划右侧说明未写明 48 小时可选窗口或结束与开始相差不超过 24 小时');
   if (app.innerHTML.includes('>发布状态<') || /<th>发布状态<\/th>/u.test(app.innerHTML)) errors.push('后台飞行计划列表误展示发布状态列');
   if (!app.innerHTML.includes('未执行') || !app.innerHTML.includes('已确认执行')) errors.push('后台飞行计划列表执行状态未按未执行/已确认执行展示');
   if (/data-go="form\/flights\//u.test(app.innerHTML)) errors.push('后台飞行计划列表仍展示编辑入口');
@@ -832,6 +846,12 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   if (!app.innerHTML.includes('已选设备') || !app.innerHTML.includes('SN-****-0192') || !app.innerHTML.includes('verification-clear-drone') || app.innerHTML.includes('device-picker-list')) errors.push('点选台账设备后未带出序列号、缺少重选，或未收起选择列表');
   visit('#/streets');
   if (!app.innerHTML.includes('街道配置') || !app.innerHTML.includes('新增街道') || !app.innerHTML.includes('钟公庙街道') || !['编号', '名称', '排序', '状态', '更新时间'].every((field) => app.innerHTML.includes(field))) errors.push('街道配置列表字段或预置数据不正确');
+  {
+    const flightNav = app.innerHTML.match(/data-group="飞行计划管理"[\s\S]*?<\/div><\/div>/u)?.[0] || '';
+    if (!['data-go="flights"', 'data-go="streets"', 'data-go="districts"', 'data-go="flight-activity-types"'].every((item) => flightNav.includes(item))) errors.push('街道/市区/飞行活动类型配置未归入侧栏「飞行计划管理」');
+    const droneNav = app.innerHTML.match(/data-group="无人机后台管理"[\s\S]*?<\/div><\/div>/u)?.[0] || '';
+    if (['data-go="streets"', 'data-go="districts"', 'data-go="flight-activity-types"'].some((item) => droneNav.includes(item))) errors.push('街道/市区/飞行活动类型配置仍留在「无人机后台管理」');
+  }
   click({ action: 'modal', modal: 'edit-config', key: 'streets', item: 'new' });
   if (!app.innerHTML.includes('新增街道') || !app.innerHTML.includes('data-draft-field="name"') || !app.innerHTML.includes('submit-config')) errors.push('街道配置新增弹窗不正确');
   click({ action: 'close-modal' });

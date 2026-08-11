@@ -350,8 +350,8 @@
   const groups = [
     ['工作台', [['dashboard','工作台']]],
     ['用户和企业管理', [['users','用户管理'],['companies','企业管理'],['blacklist','黑名单']]],
-    ['无人机后台管理', [['certificates','UOM 登记证'],['drones','无人机管理'],['drone-blacklist','无人机黑名单'],['verification','设备核查'],['streets','街道配置'],['districts','市区配置'],['flight-activity-types','飞行活动类型配置']]],
-    ['飞行计划管理', [['flights','飞行计划']]],
+    ['无人机后台管理', [['certificates','UOM 登记证'],['drones','无人机管理'],['drone-blacklist','无人机黑名单'],['verification','设备核查']]],
+    ['飞行计划管理', [['flights','飞行计划'],['streets','街道配置'],['districts','市区配置'],['flight-activity-types','飞行活动类型配置']]],
     ['活动管理', [['activities','活动管理']]],
     ['宣传科普管理', [['laws','低空安全普法'],['news','新闻公告']]],
     ['UOM流程指导', [['guides','操作手册'],['faq','常见问题']]],

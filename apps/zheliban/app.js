@@ -373,7 +373,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightTimePicker: null, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -415,15 +415,101 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
   const flightPlanWindowMs = 48 * 60 * 60 * 1000;
+  const flightDurationMaxMs = 24 * 60 * 60 * 1000;
   const flightPlanTimeMin = () => toDateTimeLocal(new Date());
   const flightPlanTimeMax = () => toDateTimeLocal(new Date(Date.now() + flightPlanWindowMs));
+  const parseFlightDateTime = (value) => {
+    if (!value) return null;
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
   const isWithinFlightPlanWindow = (value) => {
-    if (!value) return false;
-    const picked = new Date(String(value).replace(' ', 'T'));
-    if (Number.isNaN(picked.getTime())) return false;
+    const picked = parseFlightDateTime(value);
+    if (!picked) return false;
     const min = new Date(flightPlanTimeMin()).getTime();
     const max = new Date(flightPlanTimeMax()).getTime();
     return picked.getTime() >= min && picked.getTime() <= max;
+  };
+  const isFlightSpanWithin24Hours = (startAt, endAt) => {
+    const start = parseFlightDateTime(startAt);
+    const end = parseFlightDateTime(endAt);
+    if (!start || !end) return false;
+    const diff = end.getTime() - start.getTime();
+    return diff >= 0 && diff <= flightDurationMaxMs;
+  };
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const formatFlightTimeLabel = (value) => {
+    const date = parseFlightDateTime(value);
+    if (!date) return '';
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  };
+  const flightTimeBoundsForField = (field) => {
+    const timeMin = new Date(flightPlanTimeMin()).getTime();
+    const timeMax = new Date(flightPlanTimeMax()).getTime();
+    if (field === 'endAt') {
+      const start = parseFlightDateTime(state.flightDraft.startAt);
+      const endMinMs = Math.max(timeMin, start ? start.getTime() : timeMin);
+      const endMaxMs = Math.min(timeMax, start ? start.getTime() + flightDurationMaxMs : timeMax);
+      return { minMs: endMinMs, maxMs: Math.max(endMinMs, endMaxMs) };
+    }
+    return { minMs: timeMin, maxMs: timeMax };
+  };
+  const flightTimeDateKeys = (minMs, maxMs) => {
+    const keys = [];
+    const cursor = new Date(minMs);
+    cursor.setHours(0, 0, 0, 0);
+    const last = new Date(maxMs);
+    last.setHours(0, 0, 0, 0);
+    for (let stamp = cursor.getTime(); stamp <= last.getTime(); stamp += 24 * 60 * 60 * 1000) {
+      const day = new Date(stamp);
+      keys.push(`${day.getFullYear()}-${pad2(day.getMonth() + 1)}-${pad2(day.getDate())}`);
+    }
+    return keys;
+  };
+  const flightTimeHoursForDate = (dateKey, minMs, maxMs) => {
+    const hours = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+      const start = new Date(`${dateKey}T${pad2(hour)}:00`).getTime();
+      const end = new Date(`${dateKey}T${pad2(hour)}:59`).getTime();
+      if (end >= minMs && start <= maxMs) hours.push(pad2(hour));
+    }
+    return hours;
+  };
+  const flightTimeMinutesFor = (dateKey, hour, minMs, maxMs) => {
+    const minutes = [];
+    for (let minute = 0; minute < 60; minute += 1) {
+      const stamp = new Date(`${dateKey}T${hour}:${pad2(minute)}`).getTime();
+      if (stamp >= minMs && stamp <= maxMs) minutes.push(pad2(minute));
+    }
+    return minutes;
+  };
+  const clampFlightTimeDraft = (draft, field) => {
+    const { minMs, maxMs } = flightTimeBoundsForField(field);
+    const dates = flightTimeDateKeys(minMs, maxMs);
+    let date = dates.includes(draft.date) ? draft.date : (dates[0] || '');
+    const hours = flightTimeHoursForDate(date, minMs, maxMs);
+    let hour = hours.includes(draft.hour) ? draft.hour : (hours[0] || '00');
+    const minutes = flightTimeMinutesFor(date, hour, minMs, maxMs);
+    let minute = minutes.includes(draft.minute) ? draft.minute : (minutes[0] || '00');
+    return { field, date, hour, minute, dates, hours, minutes, minMs, maxMs };
+  };
+  const flightTimeValueFromParts = (parts) => `${parts.date}T${parts.hour}:${parts.minute}`;
+  const buildFlightTimeDraft = (field, preferredValue) => {
+    const { minMs, maxMs } = flightTimeBoundsForField(field);
+    let current = parseFlightDateTime(preferredValue);
+    if (!current || current.getTime() < minMs || current.getTime() > maxMs) {
+      current = new Date(Math.min(Math.max(Date.now(), minMs), maxMs));
+    }
+    const rounded = new Date(current);
+    rounded.setSeconds(0, 0);
+    if (rounded.getTime() > maxMs) rounded.setTime(maxMs);
+    if (rounded.getTime() < minMs) rounded.setTime(minMs);
+    return clampFlightTimeDraft({
+      field,
+      date: `${rounded.getFullYear()}-${pad2(rounded.getMonth() + 1)}-${pad2(rounded.getDate())}`,
+      hour: pad2(rounded.getHours()),
+      minute: pad2(rounded.getMinutes())
+    }, field);
   };
   const status = (value) => `<span class="status ${value === '已注销' || value === '已停用' ? 'neutral' : value.includes('异常') || value.includes('禁用') ? 'danger' : value.includes('待') || value.includes('补充') ? 'warning' : value.includes('已') || value.includes('有效') || value.includes('正常') ? 'success' : 'info'}">${safe(value)}</span>`;
   const certificateStatus = (value) => `<span class="status ${value === '已注销' ? 'neutral' : 'success'}">${safe(value)}</span>`;
@@ -443,7 +529,7 @@
   const mobileChrome = (fallback = 'home') => `<header class="mobile-chrome"><div class="mobile-status-bar" aria-hidden="true"><span class="mobile-status-time">9:41</span><span class="mobile-status-icons"><i class="mobile-signal"></i><i class="mobile-wifi"></i><i class="mobile-battery"></i></span></div><div class="mobile-app-bar"><button type="button" class="mobile-back" data-action="back" data-fallback="${safe(fallback)}" aria-label="返回"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h1 class="mobile-app-title">鄞州低空智护</h1><button type="button" class="mobile-more" data-action="mobile-more" aria-label="更多"><span></span><span></span><span></span></button></div></header>`;
   const shell = (content, active = route()) => {
     const profile = data.profiles[state.role];
-    const extras = `${state.modal ? modal() : ''}${state.regionPickerOpen ? regionPicker() : ''}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
+    const extras = `${state.modal ? modal() : ''}${state.regionPickerOpen ? regionPicker() : ''}<div data-flight-time-overlay>${state.flightTimePicker ? flightTimePicker() : ''}</div>${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
     if (state.viewport === 'desktop') {
       return `${desktopChrome(profile, active)}<section class="main-content">${content}</section>${extras}`;
     }
@@ -927,6 +1013,99 @@
     const col = (level, label, items, selected) => `<div class="region-picker-col" role="listbox" aria-label="${label}">${items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-region" data-level="${level}" data-value="${safe(item)}" role="option" aria-selected="${selected === item ? 'true' : 'false'}">${safe(item)}</button>`).join('') || `<span class="region-picker-empty">暂无选项</span>`}</div>`;
     return `<div class="region-picker-layer" role="dialog" aria-modal="true" aria-label="选择省市区"><section class="region-picker"><div class="region-picker-wheel"><div class="region-picker-highlight" aria-hidden="true"></div>${col('province', '省', provinces, draft.province)}${col('city', '市', cities, draft.city)}${col('district', '区', districts, draft.district)}</div><div class="region-picker-actions"><button type="button" class="secondary-btn" data-action="cancel-region-picker">取消</button><button type="button" class="primary-btn" data-action="confirm-region-picker">确定</button></div></section></div>`;
   };
+  const flightTimeControl = (field, ariaLabel) => {
+    const label = formatFlightTimeLabel(state.flightDraft[field] || '');
+    return `<button type="button" class="datetime-trigger${label ? '' : ' is-placeholder'}" data-action="open-flight-time" data-field="${field}" aria-label="${safe(ariaLabel)}"><span>${label || '请选择时间'}</span><i class="datetime-trigger-icon" aria-hidden="true"></i></button>`;
+  };
+  const flightTimeDateLabel = (key) => {
+    const [, m, d] = key.split('-');
+    return `${Number(m)}月${Number(d)}日`;
+  };
+  const flightTimePickerColHtml = (level, items, selected, format = (v) => v) => items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-flight-time" data-level="${level}" data-value="${safe(item)}" role="option" aria-selected="${selected === item ? 'true' : 'false'}">${safe(format(item))}</button>`).join('') || `<span class="region-picker-empty">暂无选项</span>`;
+  const flightTimePicker = () => {
+    const raw = state.flightTimePicker;
+    if (!raw) return '';
+    const parts = clampFlightTimeDraft(raw, raw.field);
+    const title = parts.field === 'endAt' ? '选择预计结束时间' : '选择预计开始时间';
+    const col = (level, label, items, selected, format = (v) => v) => `<div class="region-picker-col" data-picker-level="${level}" role="listbox" aria-label="${label}">${flightTimePickerColHtml(level, items, selected, format)}</div>`;
+    return `<div class="region-picker-layer flight-time-picker-layer" role="dialog" aria-modal="true" aria-label="${title}"><section class="region-picker"><div class="flight-time-picker-head"><b>${title}</b></div><div class="region-picker-wheel flight-time-wheel"><div class="region-picker-highlight" aria-hidden="true"></div>${col('date', '日期', parts.dates, parts.date, flightTimeDateLabel)}${col('hour', '时', parts.hours, parts.hour, (v) => `${v} 时`)}${col('minute', '分', parts.minutes, parts.minute, (v) => `${v} 分`)}</div><div class="region-picker-actions"><button type="button" class="secondary-btn" data-action="cancel-flight-time">取消</button><button type="button" class="primary-btn" data-action="confirm-flight-time">确定</button></div></section></div>`;
+  };
+  const preserveMainScroll = (fn) => {
+    const main = app.querySelector('.main-content');
+    const top = main?.scrollTop ?? 0;
+    fn();
+    if (main) main.scrollTop = top;
+  };
+  const scrollPickerColumnToActive = (col) => {
+    const active = col.querySelector('.region-picker-item.is-active');
+    if (!active) return;
+    col.scrollTop = Math.max(0, active.offsetTop - (col.clientHeight - active.offsetHeight) / 2);
+  };
+  const scrollPickerColumnsToActive = (root) => {
+    const scope = root || app.querySelector('[data-flight-time-overlay]');
+    if (!scope) return;
+    requestAnimationFrame(() => {
+      scope.querySelectorAll('.region-picker-col').forEach(scrollPickerColumnToActive);
+    });
+  };
+  const patchFlightTimePickerWheel = () => {
+    const host = app.querySelector('[data-flight-time-overlay]');
+    if (!host || !state.flightTimePicker) return false;
+    const parts = clampFlightTimeDraft(state.flightTimePicker, state.flightTimePicker.field);
+    state.flightTimePicker = parts;
+    const layer = host.querySelector('.flight-time-picker-layer');
+    if (!layer) {
+      preserveMainScroll(() => {
+        host.innerHTML = flightTimePicker();
+        scrollPickerColumnsToActive(host);
+      });
+      return true;
+    }
+    const configs = [
+      { level: 'date', items: parts.dates, selected: parts.date, format: flightTimeDateLabel },
+      { level: 'hour', items: parts.hours, selected: parts.hour, format: (v) => `${v} 时` },
+      { level: 'minute', items: parts.minutes, selected: parts.minute, format: (v) => `${v} 分` }
+    ];
+    preserveMainScroll(() => {
+      configs.forEach(({ level, items, selected, format }) => {
+        const col = layer.querySelector(`.region-picker-col[data-picker-level="${level}"]`);
+        if (!col) return;
+        const currentValues = [...col.querySelectorAll('[data-value]')].map((node) => node.dataset.value);
+        const sameOptions = currentValues.length === items.length && currentValues.every((value, index) => value === items[index]);
+        if (sameOptions) {
+          col.querySelectorAll('.region-picker-item').forEach((btn) => {
+            const active = btn.dataset.value === selected;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          return;
+        }
+        col.innerHTML = flightTimePickerColHtml(level, items, selected, format);
+        scrollPickerColumnToActive(col);
+      });
+    });
+    return true;
+  };
+  const syncFlightTimeTriggers = () => {
+    app.querySelectorAll('[data-action="open-flight-time"]').forEach((btn) => {
+      const field = btn.dataset.field === 'endAt' ? 'endAt' : 'startAt';
+      const label = formatFlightTimeLabel(state.flightDraft[field] || '');
+      btn.classList.toggle('is-placeholder', !label);
+      const span = btn.querySelector('span');
+      if (span) span.textContent = label || '请选择时间';
+    });
+  };
+  const scrollFlightTimePickerActive = () => scrollPickerColumnsToActive();
+  const patchFlightTimeOverlay = () => {
+    const host = app.querySelector('[data-flight-time-overlay]');
+    if (!host) return false;
+    preserveMainScroll(() => {
+      host.innerHTML = state.flightTimePicker ? flightTimePicker() : '';
+      syncFlightTimeTriggers();
+      if (state.flightTimePicker) scrollPickerColumnsToActive(host);
+    });
+    return true;
+  };
   const modal = () => {
     const type = state.modal;
     if (type === 'execute-flight') {
@@ -991,8 +1170,6 @@
     if (type === 'flight') {
       const editing = state.flightMode === 'edit';
       const draft = state.flightDraft;
-      const timeMin = flightPlanTimeMin();
-      const timeMax = flightPlanTimeMax();
       const droneOptions = roleDrones().filter((x) => !['已注销'].includes(x.status)).map((x) => { const name = data.uomValue(x, 'aircraftName'); return `<option value="${safe(name)}"${draft.drone === name ? ' selected' : ''}>${safe(flightDroneLabel(x))}</option>`; }).join('');
       const selectOptions = (field, options) => options.map((value) => `<option value="${safe(value)}"${(draft[field] || '') === value ? ' selected' : ''}>${value || '请选择'}</option>`).join('');
       const takeoffOptions = [`<option value="">请选择街道</option>`, ...(data.yinzhouStreets || []).map((street) => `<option value="${safe(street)}"${draft.takeoffSite === street ? ' selected' : ''}>${safe(street)}</option>`)].join('');
@@ -1017,8 +1194,8 @@
         formField('任务性质', `<select required data-flight-field="missionNature">${selectOptions('missionNature', ['个人娱乐', '航拍摄影', '巡检巡查', '培训演练', '其他'])}</select>`),
         formField('操控模式', `<select required data-flight-field="controlMode">${selectOptions('controlMode', ['', '视距内飞行', '超视距飞行'])}</select>`),
         formField('飞行模式', `<select required data-flight-field="flightMode">${selectOptions('flightMode', ['', '手动飞行', '自主飞行'])}</select>`),
-        formField('预计开始时间', `<input required type="datetime-local" min="${timeMin}" max="${timeMax}" data-flight-field="startAt" value="${safe(draft.startAt || '')}" />`),
-        formField('预计结束时间', `<input required type="datetime-local" min="${timeMin}" max="${timeMax}" data-flight-field="endAt" value="${safe(draft.endAt || '')}" />`),
+        formField('预计开始时间', flightTimeControl('startAt', '选择预计开始时间')),
+        formField('预计结束时间', flightTimeControl('endAt', '选择预计结束时间')),
         formField('飞行区域', `<div class="compound-field">${areaShot}<div class="fixed-field"><select required data-flight-field="city">${cityOptions}</select><input required data-flight-field="street" value="${safe(draft.street || '')}" placeholder="请填写飞行区域" /></div></div>`),
         formField('飞行设备', `<select required data-flight-field="drone">${droneOptions}</select>`),
         formField('通信联络方式', `<div class="fixed-field"><input required data-flight-field="operator" value="${safe(draft.operator || '')}" placeholder="联系人" /><input required data-flight-field="operatorPhone" value="${safe(draft.operatorPhone || '')}" placeholder="联系电话" /></div>`),
@@ -1087,7 +1264,8 @@
     syncViewportChrome(name);
     app.innerHTML = present(!state.role || name === 'login' ? login() : page());
     if (state.modal) setTimeout(() => document.querySelector('#modal-title')?.focus(), 0);
-    if (state.regionPickerOpen) setTimeout(() => document.querySelectorAll('.region-picker-item.is-active').forEach((node) => node.scrollIntoView({ block: 'center' })), 0);
+    if (state.regionPickerOpen) setTimeout(() => document.querySelectorAll('.region-picker-layer:not(.flight-time-picker-layer) .region-picker-item.is-active').forEach((node) => node.scrollIntoView({ block: 'center' })), 0);
+    if (state.flightTimePicker) scrollFlightTimePickerActive();
   };
   const announce = (text) => { state.toast = text; render(); setTimeout(() => { state.toast = ''; render(); }, 2200); };
   const closeModal = () => {
@@ -1095,10 +1273,14 @@
     state.ocrRequest += 1;
     state.pendingDrone = '';
     state.regionPickerOpen = false;
+    state.flightTimePicker = null;
     state.modal = null;
     render();
     if (returnFocus) setTimeout(() => document.querySelector(returnFocus)?.focus(), 0);
   };
+  document.addEventListener('mousedown', (event) => {
+    if (event.target.closest?.('[data-action="pick-flight-time"]')) event.preventDefault();
+  });
   document.addEventListener('click', (event) => {
     if (state.feedbackTypeOpen && !event.target.closest?.('.feedback-type-picker')) {
       state.feedbackTypeOpen = false;
@@ -1216,11 +1398,25 @@
       if (state.role === 'company') { state.modal = null; announce('企业账号仅可查看本公司飞行计划'); return; }
       const form = document.querySelector('#prototype-form'); if (form && !form.reportValidity()) return;
       const draft = state.flightDraft;
-      if (state.areaShot !== 'done') { announce('请上传飞行区域截图'); return; }
       if (!isWithinFlightPlanWindow(draft.startAt) || !isWithinFlightPlanWindow(draft.endAt)) {
         announce('飞行计划时间只能选择当前时刻起未来 48 小时内');
         return;
       }
+      const startMs = parseFlightDateTime(draft.startAt)?.getTime();
+      const endMs = parseFlightDateTime(draft.endAt)?.getTime();
+      if (startMs == null || endMs == null) {
+        announce('请填写预计开始时间与预计结束时间');
+        return;
+      }
+      if (endMs < startMs) {
+        announce('预计结束时间不能早于预计开始时间');
+        return;
+      }
+      if (!isFlightSpanWithin24Hours(draft.startAt, draft.endAt)) {
+        announce('预计结束时间与开始时间相差不能超过 24 小时');
+        return;
+      }
+      if (state.areaShot !== 'done') { announce('请上传飞行区域截图'); return; }
       const stamp = `${data.now} 09:30`;
       const areaShotValue = state.areaShotName || '已上传区域截图';
       if (state.flightMode === 'edit') {
@@ -1322,6 +1518,64 @@
       }
       state.regionPickerDraft = data.normalizeResidenceSelection ? data.normalizeResidenceSelection(next) : next;
       render();
+      return;
+    }
+    if (action === 'open-flight-time') {
+      const field = target.dataset.field === 'endAt' ? 'endAt' : 'startAt';
+      if (field === 'endAt' && !state.flightDraft.startAt) {
+        announce('请先选择预计开始时间');
+        return;
+      }
+      const preferred = field === 'endAt' && !state.flightDraft.endAt && state.flightDraft.startAt
+        ? toDateTimeLocal(new Date(Math.min(parseFlightDateTime(state.flightDraft.startAt).getTime() + 60 * 60 * 1000, flightTimeBoundsForField('endAt').maxMs)))
+        : state.flightDraft[field];
+      state.flightTimePicker = buildFlightTimeDraft(field, preferred);
+      if (!patchFlightTimeOverlay()) render();
+      return;
+    }
+    if (action === 'cancel-flight-time') {
+      state.flightTimePicker = null;
+      if (!patchFlightTimeOverlay()) render();
+      return;
+    }
+    if (action === 'pick-flight-time') {
+      if (!state.flightTimePicker) return;
+      const level = target.dataset.level;
+      const value = target.dataset.value || '';
+      const next = { ...state.flightTimePicker };
+      if (level === 'date') next.date = value;
+      if (level === 'hour') next.hour = value;
+      if (level === 'minute') next.minute = value;
+      state.flightTimePicker = clampFlightTimeDraft(next, next.field);
+      if (!patchFlightTimePickerWheel()) render();
+      return;
+    }
+    if (action === 'confirm-flight-time') {
+      if (!state.flightTimePicker) return;
+      const parts = clampFlightTimeDraft(state.flightTimePicker, state.flightTimePicker.field);
+      const value = flightTimeValueFromParts(parts);
+      const stamp = parseFlightDateTime(value)?.getTime();
+      if (stamp == null || stamp < parts.minMs || stamp > parts.maxMs) {
+        announce('请选择允许范围内的时间');
+        return;
+      }
+      state.flightDraft[parts.field] = value;
+      state.flightTimePicker = null;
+      let adjustToast = '';
+      if (parts.field === 'startAt') {
+        const start = parseFlightDateTime(value);
+        const end = parseFlightDateTime(state.flightDraft.endAt);
+        if (start && end && end.getTime() < start.getTime()) {
+          const adjusted = Math.min(start.getTime() + 60 * 60 * 1000, start.getTime() + flightDurationMaxMs, new Date(flightPlanTimeMax()).getTime());
+          state.flightDraft.endAt = toDateTimeLocal(new Date(adjusted));
+          adjustToast = '预计结束时间已随开始时间调整';
+        } else if (start && end && end.getTime() - start.getTime() > flightDurationMaxMs) {
+          state.flightDraft.endAt = toDateTimeLocal(new Date(start.getTime() + flightDurationMaxMs));
+          adjustToast = '预计结束时间已按开始时间起 24 小时内自动调整';
+        }
+      }
+      if (adjustToast) announce(adjustToast);
+      else if (!patchFlightTimeOverlay()) render();
       return;
     }
     if (action === 'save-supplement') {
@@ -1621,7 +1875,23 @@
       render();
       return;
     }
-    if (event.target.dataset?.flightField) { state.flightDraft[event.target.dataset.flightField] = event.target.value; return; }
+    if (event.target.dataset?.flightField) {
+      const field = event.target.dataset.flightField;
+      state.flightDraft[field] = event.target.value;
+      if (field === 'startAt') {
+        const start = parseFlightDateTime(state.flightDraft.startAt);
+        const endInput = typeof document?.querySelector === 'function' ? document.querySelector('[data-flight-field="endAt"]') : null;
+        if (start && endInput) {
+          const planMin = new Date(flightPlanTimeMin()).getTime();
+          const planMax = new Date(flightPlanTimeMax()).getTime();
+          const endMinMs = Math.max(planMin, start.getTime());
+          const endMaxMs = Math.min(planMax, start.getTime() + flightDurationMaxMs);
+          endInput.min = toDateTimeLocal(new Date(endMinMs));
+          endInput.max = toDateTimeLocal(new Date(Math.max(endMinMs, endMaxMs)));
+        }
+      }
+      return;
+    }
     if (event.target.dataset?.flightRange !== undefined) {
       const key = event.target.dataset.flightRange;
       if (key === 'start') state.flightRangeStart = event.target.value || '';
