@@ -60,10 +60,41 @@ const runtime = (appFile, initialHash, checks, initialStorage = null) => {
   if (initialStorage) Object.entries(initialStorage).forEach(([key, value]) => browserStorage.set(key, JSON.stringify(value)));
   const listeners = { document: {}, window: {} };
   let formValid = true;
+  const patchableHost = (attr) => ({
+    set innerHTML(next) {
+      const openMatch = app.innerHTML.match(new RegExp(`<([a-z0-9-]+)[^>]*\\b${attr}\\b[^>]*>`, 'i'));
+      if (!openMatch) return;
+      const tag = openMatch[1];
+      const openTag = openMatch[0];
+      const start = app.innerHTML.indexOf(openTag) + openTag.length;
+      let depth = 1;
+      const re = /<\/?([a-z0-9-]+)[^>]*>/gi;
+      re.lastIndex = start;
+      let match;
+      while ((match = re.exec(app.innerHTML))) {
+        if (match[0].startsWith('</')) {
+          depth -= 1;
+          if (depth === 0 && match[1].toLowerCase() === tag.toLowerCase()) {
+            app.innerHTML = app.innerHTML.slice(0, start) + next + app.innerHTML.slice(match.index);
+            return;
+          }
+        } else if (!match[0].endsWith('/>')) {
+          depth += 1;
+        }
+      }
+    }
+  });
   const app = {
     innerHTML: '',
     className: 'admin-shell',
-    querySelector() { return null; },
+    querySelector(selector) {
+      if (selector === '[data-search-results]' && app.innerHTML.includes('data-search-results')) return patchableHost('data-search-results');
+      if (selector === '[data-guide-search-results]' && app.innerHTML.includes('data-guide-search-results')) return patchableHost('data-guide-search-results');
+      if (selector === '[data-guide-search-pagination]' && app.innerHTML.includes('data-guide-search-pagination')) return patchableHost('data-guide-search-pagination');
+      if (selector === '[data-faq-search-results]' && app.innerHTML.includes('data-faq-search-results')) return patchableHost('data-faq-search-results');
+      if (selector === '[data-faq-search-pagination]' && app.innerHTML.includes('data-faq-search-pagination')) return patchableHost('data-faq-search-pagination');
+      return null;
+    },
     querySelectorAll() { return []; }
   };
   class FileReaderMock {
@@ -77,6 +108,7 @@ const runtime = (appFile, initialHash, checks, initialStorage = null) => {
   const documentMock = {
     querySelector(selector) {
       if (selector === '#app') return app;
+      if (selector.startsWith('#app ')) return app.querySelector(selector.slice(5));
       if (selector === '#prototype-form' || selector === '#admin-form' || selector === '#ocr-form' || selector === '#profile-form' || selector === '#feedback-form' || selector === '#drone-create-form') return { reportValidity: () => formValid };
       if (selector === '#search') return null;
       return null;
@@ -146,7 +178,7 @@ const runtime = (appFile, initialHash, checks, initialStorage = null) => {
   checks({ app, visit, click, change, search, upload, uploadFeedback, input, inputGuideSearch, inputFaqSearch, inputProfile, inputUserProfile, inputCompany, changeCompany, inputMember, inputCompanyProfile, changeCompanyProfile, inputDraft, changeDraft, inputLogin, inputDrone, changeDrone, setValidity: (value) => { formValid = value; } });
 };
 
-runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload, uploadFeedback, input, inputGuideSearch, inputFaqSearch, inputProfile, inputCompany, changeCompany, inputMember, inputDrone, changeDrone, setValidity }) => {
+runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, search, upload, uploadFeedback, input, inputGuideSearch, inputFaqSearch, inputProfile, inputCompany, changeCompany, inputMember, inputDrone, changeDrone, setValidity }) => {
   if (!app.innerHTML.includes('个人登录') || !app.innerHTML.includes('法人登录')) errors.push('用户端登录类型入口渲染失败');
   if (app.innerHTML.includes('login-help')) errors.push('用户端登录页残留辅助提示容器');
   click({ action: 'login', value: 'personal' });
@@ -205,6 +237,11 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('已确认执行')) errors.push('浙里办执行确认交互失败');
   visit('#/activities');
   if (app.innerHTML.includes('activity-carousel') || app.innerHTML.includes('重点活动') || app.innerHTML.includes('activity-slide') || app.innerHTML.includes('data-action="activity-slide"')) errors.push('活动中心仍保留重点活动轮播');
+  search('钟公庙');
+  if (!app.innerHTML.includes('夏季低空安全宣传进社区') || app.innerHTML.includes('2026 年鄞州区无人机飞行安全培训')) errors.push('浙里办活动中心关键词搜索失败');
+  search('不存在活动');
+  if (!app.innerHTML.includes('暂无符合条件的数据')) errors.push('浙里办活动中心搜索空结果反馈缺失');
+  search('');
   click({ action: 'join', id: 'ACT-01' });
   if (!app.innerHTML.includes('已报名')) errors.push('浙里办活动报名交互失败');
   click({ action: 'activity-filter' });
@@ -304,6 +341,11 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (app.innerHTML.includes('<img src=x onerror=alert(1)>') || !app.innerHTML.includes('&lt;img src=x onerror=alert(1)&gt;')) errors.push('UOM OCR 可编辑字段未安全转义');
   if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','本证发给','联系手机','状态','注册日期','上传时间'].every((field) => app.innerHTML.includes(field)) || app.innerHTML.includes('归集更新时间') || app.innerHTML.includes('登记材料')) errors.push('用户端 UOM 登记证详情字段未按证载信息展示');
   if (!app.innerHTML.includes('certificate-field-image') || !app.innerHTML.includes('登记证截图') || !app.innerHTML.includes('certificate-field')) errors.push('用户端登记证详情未将截图作为底部字段展示');
+  if (!app.innerHTML.includes('data-action="preview-image"') || !app.innerHTML.includes('点击放大查看')) errors.push('用户端登记证截图缺少点击放大入口');
+  click({ action: 'preview-image', src: 'data:image/png;base64,AA==', alt: '已上传的 UOM 登记证截图' });
+  if (!app.innerHTML.includes('image-preview-layer') || !app.innerHTML.includes('data-action="close-image-preview"')) errors.push('用户端图片放大预览层未打开');
+  click({ action: 'close-image-preview' });
+  if (app.innerHTML.includes('image-preview-layer')) errors.push('用户端关闭图片预览后预览层仍残留');
   if (app.innerHTML.includes('变更记录') || app.innerHTML.includes('暂无变更记录')) errors.push('用户端登记证详情仍展示变更记录区块');
   click({ action: 'back', fallback: 'certificates' });
   if (!app.innerHTML.includes('上传登记证照片') || !app.innerHTML.includes('data-action="open-certificate-upload"')) errors.push('用户端 UOM 详情返回未回到来源列表');
@@ -372,6 +414,7 @@ runtime('apps/zheliban/app.js', '#/login', ({ app, visit, click, change, upload,
   if (!app.innerHTML.includes('已选择的飞行执照图片')) errors.push('飞行执照图片预览缺失');
   click({ action: 'save-license' });
   if (!app.innerHTML.includes('飞行执照图片已保存') || !app.innerHTML.includes('已上传') || !app.innerHTML.includes('license-thumb') || !app.innerHTML.includes('已上传的飞行执照照片')) errors.push('飞行执照图片保存后缩略图缺失');
+  if (!app.innerHTML.includes('data-action="preview-image"')) errors.push('飞行执照缩略图缺少点击放大入口');
   visit('#/login');
   click({ action: 'login', value: 'company' });
   visit('#/home');
@@ -662,6 +705,11 @@ runtime('apps/admin/app.js', '#/login', ({ app, visit, click, change, search, in
   const ocrId = (app.innerHTML.match(/UOM-OCR-\d+/u) || ['UOM-OCR-1'])[0];
   visit(`#/detail/certificates/${ocrId}`);
   if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','本证发给','联系手机','状态','注册日期','登记证图片'].every((field) => app.innerHTML.includes(field)) || !app.innerHTML.includes('certificate-attachment-image') || !app.innerHTML.includes('data:image/png;base64,AA==') || app.innerHTML.includes('未上传')) errors.push('后台 UOM 登记证详情未展示用户端申请图片');
+  if (!app.innerHTML.includes('data-action="preview-image"') || !app.innerHTML.includes('点击放大查看')) errors.push('后台 UOM 登记证图片缺少点击放大入口');
+  click({ action: 'preview-image', src: 'data:image/png;base64,AA==', alt: '用户端提交的 UOM 登记证图片' });
+  if (!app.innerHTML.includes('image-preview-layer') || !app.innerHTML.includes('data-action="close-image-preview"')) errors.push('后台图片放大预览层未打开');
+  click({ action: 'close-image-preview' });
+  if (app.innerHTML.includes('image-preview-layer')) errors.push('后台关闭图片预览后预览层仍残留');
   if (app.innerHTML.includes('编辑登记信息')) errors.push('后台 UOM 登记证详情仍展示无效编辑入口');
   visit('#/detail/drones/DR-001');
   if (!['登记标志','航空器型号和制造人','序号','产品名称','空机重量','最大起飞重量','类型','登记状态','注册日期','设备分组','管理状态'].every((field) => app.innerHTML.includes(field))) errors.push('后台无人机详情字段未与 UOM 登记证及用户端分组口径统一');

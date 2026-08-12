@@ -348,7 +348,7 @@
     for (let i = 0; i < 4; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
     return out;
   };
-  const state = { modal: null, toast: '', query: '', filter: '全部', areaFilter: '全部', faqPage: 1, disabledDrones: new Set(), overrides: new Map(), userProfileDraft: {}, companyProfileDraft: {}, draft: {}, sidebarCollapsed: false, helpCollapsed: window.localStorage.getItem(helpStorageKey) === '1', expandedGroups: new Set(['工作台', '无人机后台管理']), tabs: [{ id: 'dashboard', label: '工作台', closable: false }], feedbackTab: 'content', lightTab: 'issue', dashboardPick: null, areaRange: 'week', areaCustomStart: '2026-07-29', areaCustomEnd: '2026-08-04', sysUserFilter: { userName: '', phone: '', status: '', start: '', end: '' }, sysUserSelected: '', roleFilter: { roleName: '', roleKey: '', status: '', start: '', end: '' }, roleSelected: '', menuFilter: { name: '', status: '' }, menuExpanded: false, dictFilter: { name: '', type: '', status: '' }, configFilter: { name: '', key: '', type: '' }, session: readAdminSession(), loginDraft: { account: 'admin', password: '', captcha: '' }, loginCaptcha: makeLoginCaptcha(), loginError: '', devicePickerQuery: '', devicePickerPage: 1 };
+  const state = { modal: null, toast: '', query: '', filter: '全部', areaFilter: '全部', faqPage: 1, disabledDrones: new Set(), overrides: new Map(), userProfileDraft: {}, companyProfileDraft: {}, draft: {}, sidebarCollapsed: false, helpCollapsed: window.localStorage.getItem(helpStorageKey) === '1', expandedGroups: new Set(['工作台', '无人机后台管理']), tabs: [{ id: 'dashboard', label: '工作台', closable: false }], feedbackTab: 'content', lightTab: 'issue', dashboardPick: null, areaRange: 'week', areaCustomStart: '2026-07-29', areaCustomEnd: '2026-08-04', sysUserFilter: { userName: '', phone: '', status: '', start: '', end: '' }, sysUserSelected: '', roleFilter: { roleName: '', roleKey: '', status: '', start: '', end: '' }, roleSelected: '', menuFilter: { name: '', status: '' }, menuExpanded: false, dictFilter: { name: '', type: '', status: '' }, configFilter: { name: '', key: '', type: '' }, session: readAdminSession(), loginDraft: { account: 'admin', password: '', captcha: '' }, loginCaptcha: makeLoginCaptcha(), loginError: '', devicePickerQuery: '', devicePickerPage: 1, imagePreview: null };
   const syncDroneBlacklistState = () => {
     const active = new Set((ledgers.droneBlacklist || []).filter((row) => row.state === '已拉黑').map((row) => row.droneId).filter(Boolean));
     state.disabledDrones = active;
@@ -415,7 +415,7 @@
     if (id === 'login') return;
     if (!state.tabs.some((tab) => tab.id === id)) state.tabs.push({ id, label: routeLabel(id), closable: id !== 'dashboard' });
   };
-  const go = (key) => { state.modal = null; const id = normalizeRoute(key); ensureTab(id); location.hash = `#/${id}`; };
+  const go = (key) => { state.modal = null; state.imagePreview = null; const id = normalizeRoute(key); ensureTab(id); location.hash = `#/${id}`; };
   const closeTab = (id) => {
     const index = state.tabs.findIndex((tab) => tab.id === id);
     if (index < 0 || !state.tabs[index].closable) return;
@@ -476,6 +476,13 @@
     interface:'M5 5h14v14H5zM9 9h6M9 15h6'
   })[id] || 'M5 5h14v14H5zM8 9h8M8 13h8');
   const safe = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  const zoomableImage = (src, alt = '图片预览', className = '', imgClass = '') => (window.AdminUI?.zoomableImage
+    ? AdminUI.zoomableImage(src, alt, className, imgClass)
+    : (src ? `<button type="button" class="zoomable-image${className ? ` ${className}` : ''}" data-action="preview-image" data-src="${safe(src)}" data-alt="${safe(alt || '图片预览')}" aria-label="点击放大查看"><img${imgClass ? ` class="${safe(imgClass)}"` : ''} src="${safe(src)}" alt="${safe(alt || '')}" /></button>` : ''));
+  const imagePreviewLayer = () => {
+    if (!state.imagePreview?.src) return '';
+    return `<div class="image-preview-layer" role="dialog" aria-modal="true" aria-label="图片预览"><button type="button" class="image-preview-backdrop" data-action="close-image-preview" aria-label="关闭预览"></button><figure class="image-preview-panel"><img src="${safe(state.imagePreview.src)}" alt="${safe(state.imagePreview.alt || '图片预览')}" /><button type="button" class="image-preview-close" data-action="close-image-preview" aria-label="关闭">×</button></figure></div>`;
+  };
   const kind = (value) => (window.AdminUI ? AdminUI.statusKind(value) : 'info');
   const status = (value) => `<span class="status ${kind(value)}">${safe(value)}</span>`;
   const certificateStatus = (value) => value === '已注销' ? `<span class="status muted">${safe(value)}</span>` : `<span class="status success">${safe(value)}</span>`;
@@ -575,7 +582,7 @@
   const shell = (content, key = route()) => {
     const menu = currentMenu(key);
     const visibleTabs = state.tabs.map((tab) => `<div class="route-tab ${tab.id === key ? 'active' : ''}"><button class="route-tab-select" data-go="${tab.id}"${tab.id === key ? ' aria-current="page"' : ''}>${safe(tab.label)}</button>${tab.closable ? `<button class="tab-close" data-action="close-tab" data-tab="${safe(tab.id)}" aria-label="关闭${safe(tab.label)}">×</button>` : ''}</div>`).join('');
-    return deliveryCopy(`<aside id="admin-sidebar" class="side ${state.sidebarCollapsed ? 'collapsed' : ''}"><div class="admin-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><small>公安管理平台</small></div></div><nav class="side-scroll" aria-label="后台导航">${groups.map(([label, links]) => { const open = links.some(([id]) => id === menu) || state.expandedGroups.has(label); return `<div class="nav-group ${open ? 'open' : ''}"><button class="nav-group-toggle" data-action="toggle-group" data-group="${label}" aria-expanded="${open}">${groupIcon(label)}<span>${label}</span><i>⌄</i></button><div class="nav-children">${links.map(([id, name]) => `<button class="nav-link ${menu === id ? 'active' : ''}" data-go="${id}">${navIcon(id)}<span>${name}</span></button>`).join('')}</div></div>`; }).join('')}</nav><div class="side-footer"><i class="live"></i><span>系统运行正常</span></div></aside><section class="main-shell ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}"><header class="topbar"><div class="topbar-left"><button class="top-icon sidebar-trigger" data-action="toggle-sidebar" aria-controls="admin-sidebar" aria-expanded="${!state.sidebarCollapsed}" aria-label="${state.sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}">${icon('M4 6h16M4 12h16M4 18h16')}</button><div class="crumb">${breadcrumb(menu).replace(' / ',' <i>/</i> ')}</div></div><div class="top-actions"><button class="top-icon" data-action="notify" aria-label="查看提醒">${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M16 16l4 4')}</button><button class="top-icon" data-action="fullscreen" aria-label="切换全屏">${icon('M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5M3 21h5')}</button><div class="top-user"><span class="avatar">${safe((state.session && state.session.avatar) || '鄞')}</span><div class="top-user-copy"><b>${safe((state.session && state.session.name) || '管理员')}</b><small>${safe((state.session && state.session.role) || '系统管理员')}</small></div><button class="logout-btn" type="button" data-action="logout">退出登录</button></div></div></header><nav class="route-tabs" aria-label="已打开页面"><div class="route-tabs-scroll">${visibleTabs}</div><button class="tab-more" data-action="close-others" aria-label="关闭其他页签">${icon('M7 10l5 5 5-5')}</button></nav><div class="workspace ${state.helpCollapsed ? 'help-collapsed' : ''}"><section class="page-body">${content}</section>${pageHelpPanel(key)}</div></section>${state.modal ? modal() : ''}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`);
+    return deliveryCopy(`<aside id="admin-sidebar" class="side ${state.sidebarCollapsed ? 'collapsed' : ''}"><div class="admin-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><small>公安管理平台</small></div></div><nav class="side-scroll" aria-label="后台导航">${groups.map(([label, links]) => { const open = links.some(([id]) => id === menu) || state.expandedGroups.has(label); return `<div class="nav-group ${open ? 'open' : ''}"><button class="nav-group-toggle" data-action="toggle-group" data-group="${label}" aria-expanded="${open}">${groupIcon(label)}<span>${label}</span><i>⌄</i></button><div class="nav-children">${links.map(([id, name]) => `<button class="nav-link ${menu === id ? 'active' : ''}" data-go="${id}">${navIcon(id)}<span>${name}</span></button>`).join('')}</div></div>`; }).join('')}</nav><div class="side-footer"><i class="live"></i><span>系统运行正常</span></div></aside><section class="main-shell ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}"><header class="topbar"><div class="topbar-left"><button class="top-icon sidebar-trigger" data-action="toggle-sidebar" aria-controls="admin-sidebar" aria-expanded="${!state.sidebarCollapsed}" aria-label="${state.sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}">${icon('M4 6h16M4 12h16M4 18h16')}</button><div class="crumb">${breadcrumb(menu).replace(' / ',' <i>/</i> ')}</div></div><div class="top-actions"><button class="top-icon" data-action="notify" aria-label="查看提醒">${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M16 16l4 4')}</button><button class="top-icon" data-action="fullscreen" aria-label="切换全屏">${icon('M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5M3 21h5')}</button><div class="top-user"><span class="avatar">${safe((state.session && state.session.avatar) || '鄞')}</span><div class="top-user-copy"><b>${safe((state.session && state.session.name) || '管理员')}</b><small>${safe((state.session && state.session.role) || '系统管理员')}</small></div><button class="logout-btn" type="button" data-action="logout">退出登录</button></div></div></header><nav class="route-tabs" aria-label="已打开页面"><div class="route-tabs-scroll">${visibleTabs}</div><button class="tab-more" data-action="close-others" aria-label="关闭其他页签">${icon('M7 10l5 5 5-5')}</button></nav><div class="workspace ${state.helpCollapsed ? 'help-collapsed' : ''}"><section class="page-body">${content}</section>${pageHelpPanel(key)}</div></section>${state.modal ? modal() : ''}${imagePreviewLayer()}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`);
   };
   const heading = (name, _description, actions = '') => `<header class="page-heading"><div><p class="eyebrow">LOW-ALTITUDE GOVERNANCE</p><h1>${name}</h1></div><div class="actions">${actions}</div></header>`;
   const rowsFor = (key) => {
@@ -984,7 +991,7 @@
     const source = String(certificate.certificateImageUrl || '');
     const allowed = /^(?:data:image\/(?:png|jpeg);base64,[a-z0-9+/=]+|\.\.\/\.\.\/shared\/assets\/[a-z0-9._-]+\.svg)$/iu.test(source);
     if (!allowed) return '';
-    return sectionPanel('登记证图片', `<figure class="certificate-attachment"><img class="certificate-attachment-image" src="${safe(source)}" alt="用户端提交的 UOM 登记证图片" /><figcaption>登记证表格版式，来自用户端登记证申请</figcaption></figure>`);
+    return sectionPanel('登记证图片', `<figure class="certificate-attachment">${zoomableImage(source, '用户端提交的 UOM 登记证图片', 'zoomable-image--block', 'certificate-attachment-image')}<figcaption>登记证表格版式，来自用户端登记证申请</figcaption></figure>`);
   };
   const historyTimeline = (items, note = '') => {
     const ordered = items.slice().reverse();
@@ -1032,7 +1039,7 @@
       const cover = item.coverImage
         ? (isVideo
           ? `<video class="content-cover-media" src="${safe(item.coverImage)}" controls playsinline></video>`
-          : `<img class="content-cover-media" src="${safe(item.coverImage)}" alt="封面" />`)
+          : zoomableImage(item.coverImage, '封面', 'zoomable-image--cover-block', 'content-cover-media'))
         : '';
       const video = isVideo && !item.coverImage ? `<button class="video-player" data-action="notify-video" aria-label="播放视频"><span class="video-play">▶</span><b>${safe(item.title)}</b><small>示例视频 · ${safe(item.duration || '—')}</small></button>` : '';
       const effectiveStart = item.effectiveStart || item.effectiveDate || item.date || '—';
@@ -1584,6 +1591,16 @@ if (type === 'activity-confirm') {
     if (!el) return;
     if (el.dataset.go) { if (String(el.dataset.go).startsWith('form/')) { state.formKey = ''; state.formId = ''; } go(el.dataset.go); return; }
     const action = el.dataset.action;
+    if (action === 'preview-image') {
+      state.imagePreview = { src: el.dataset.src || '', alt: el.dataset.alt || '图片预览' };
+      render();
+      return;
+    }
+    if (action === 'close-image-preview') {
+      state.imagePreview = null;
+      render();
+      return;
+    }
     if (action === 'pick-region') {
       const level = el.dataset.level;
       const value = el.dataset.value || '';
@@ -2951,6 +2968,12 @@ if (type === 'activity-confirm') {
     }
     if (event.target.id === 'state-filter') { state.filter = event.target.value; state.faqPage = 1; render(); }
     if (event.target.id === 'area-filter') { state.areaFilter = event.target.value; render(); }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !state.imagePreview) return;
+    event.preventDefault();
+    state.imagePreview = null;
+    render();
   });
   window.addEventListener('hashchange', () => {
     state.query = '';

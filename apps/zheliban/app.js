@@ -378,7 +378,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightTimePicker: null, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightTimePicker: null, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), imagePreview: null, viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -390,6 +390,7 @@
   const go = (name) => {
     const current = route();
     if (current !== name && current !== 'login') state.navigation.push(current);
+    state.imagePreview = null;
     location.hash = `#/${name}`;
   };
   const goBack = (fallback = 'home') => { location.hash = `#/${state.navigation.pop() || fallback}`; };
@@ -413,6 +414,25 @@
     .replace(/<div class="login-help">[\s\S]*?<\/div>/gu, '')
     .replace(/<p><\/p>|<small><\/small>/gu, '');
   const safe = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  const zoomableImage = (src, alt = '图片预览', className = '', imgClass = '') => {
+    if (!src) return '';
+    return `<button type="button" class="zoomable-image${className ? ` ${className}` : ''}" data-action="preview-image" data-src="${safe(src)}" data-alt="${safe(alt || '图片预览')}" aria-label="点击放大查看"><img${imgClass ? ` class="${imgClass}"` : ''} src="${safe(src)}" alt="${safe(alt || '')}" /></button>`;
+  };
+  const makeImagesZoomable = (html) => String(html || '').replace(/<img\b([^>]*?)\/?>/giu, (full, attrs) => {
+    if (/\bdata-no-zoom\b/i.test(attrs) || /\bzoomable-image\b/i.test(full)) return full;
+    const srcMatch = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+    const src = srcMatch ? (srcMatch[1] || srcMatch[2] || srcMatch[3] || '') : '';
+    if (!src) return full;
+    const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+    const alt = altMatch ? (altMatch[1] || altMatch[2] || altMatch[3] || '图片预览') : '图片预览';
+    const classMatch = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs);
+    const imgClass = classMatch ? (classMatch[1] || classMatch[2] || '') : '';
+    return zoomableImage(src, alt, 'zoomable-image--inline', imgClass);
+  });
+  const imagePreviewLayer = () => {
+    if (!state.imagePreview?.src) return '';
+    return `<div class="image-preview-layer" role="dialog" aria-modal="true" aria-label="图片预览"><button type="button" class="image-preview-backdrop" data-action="close-image-preview" aria-label="关闭预览"></button><figure class="image-preview-panel"><img src="${safe(state.imagePreview.src)}" alt="${safe(state.imagePreview.alt || '图片预览')}" /><button type="button" class="image-preview-close" data-action="close-image-preview" aria-label="关闭">×</button></figure></div>`;
+  };
   const requiredMark = () => '<span class="required-mark" aria-hidden="true">*</span>';
   const formField = (label, control, { required = true, className = '' } = {}) => `<div class="form-field${className ? ` ${className}` : ''}"><span class="form-field-label">${safe(label)}${required ? requiredMark() : ''}</span>${control}</div>`;
   const toDateTimeLocal = (date) => {
@@ -547,7 +567,7 @@
   const mobileChrome = (fallback = 'home') => `<header class="mobile-chrome"><div class="mobile-status-bar" aria-hidden="true"><span class="mobile-status-time">9:41</span><span class="mobile-status-icons"><i class="mobile-signal"></i><i class="mobile-wifi"></i><i class="mobile-battery"></i></span></div><div class="mobile-app-bar"><button type="button" class="mobile-back" data-action="back" data-fallback="${safe(fallback)}" aria-label="返回"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h1 class="mobile-app-title">鄞州低空智护</h1><button type="button" class="mobile-more" data-action="mobile-more" aria-label="更多"><span></span><span></span><span></span></button></div></header>`;
   const shell = (content, active = route()) => {
     const profile = data.profiles[state.role];
-    const extras = `${state.modal ? modal() : ''}${state.regionPickerOpen ? regionPicker() : ''}<div data-flight-time-overlay>${state.flightTimePicker ? flightTimePicker() : ''}</div>${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
+    const extras = `${state.modal ? modal() : ''}${state.regionPickerOpen ? regionPicker() : ''}<div data-flight-time-overlay>${state.flightTimePicker ? flightTimePicker() : ''}</div>${imagePreviewLayer()}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`;
     if (state.viewport === 'desktop') {
       return `${desktopChrome(profile, active)}<section class="main-content">${content}</section>${extras}`;
     }
@@ -560,7 +580,7 @@
     return `<div class="page-toolbar"><button class="back-button" data-action="back" data-fallback="${safe(fallback)}" aria-label="返回">‹</button>${actions ? `<div class="page-toolbar-actions">${actions}</div>` : ''}</div>`;
   };
   const title = (text, back = true, fallback = 'home') => pageToolbar(fallback);
-  const list = (items, render) => `<div class="list">${items.length ? items.map(render).join('') : '<div class="empty">暂无符合条件的数据</div>'}</div>`;
+  const list = (items, render, { searchable = false } = {}) => `<div class="list"${searchable ? ' data-search-results' : ''}>${items.length ? items.map(render).join('') : '<div class="empty">暂无符合条件的数据</div>'}</div>`;
   const filter = (placeholder) => `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="${placeholder}" aria-label="搜索" /></div>`;
   const listActions = (actions = '') => actions ? `<div class="list-actions">${actions}</div>` : '';
   const login = () => `<section class="login-page"><div class="login-visual"><div class="login-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><span><span class="channel-mobile">浙里办 APP</span><span class="channel-desktop">浙江省政务服务网</span></span></div></div><div class="flight-lines" aria-hidden="true"></div><div class="login-message"><p>鄞州区低空安全服务</p><h1>让每一次起飞<br />都有序可查</h1><span>无人机信息管理、飞行计划与低空安全服务统一入口</span></div></div><div class="login-panel"><div class="login-panel-inner"><span class="eyebrow">用户登录</span><h2>选择登录类型</h2><p>请选择与浙里办账号对应的身份类型进入服务。</p><div class="login-options"><button class="login-option" data-action="login" data-value="personal"><span class="login-option-icon">${icon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z')}</span><span><b>个人登录</b><small>个人资料、飞行员执照与设备管理</small></span><i>›</i></button><button class="login-option" data-action="login" data-value="company"><span class="login-option-icon company">${icon('M4 21V5h16v16M8 9h2M14 9h2M8 13h2M14 13h2M10 21v-4h4v4')}</span><span><b>法人登录</b><small>企业资料、授权账号与设备管理</small></span><i>›</i></button></div><div class="login-help"><span>${icon('M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01')}</span><p>登录身份由浙江政务服务统一身份认证结果确定。</p></div></div></div></section>`;
@@ -642,7 +662,7 @@
   };
   const profileLicense = () => {
     const p = data.profiles.personal;
-    const licenseThumb = state.licenseSavedImage ? `<figure class="license-thumb"><img src="${state.licenseSavedImage}" alt="已上传的飞行执照照片" /><figcaption>${safe(p.licenseFileName || '飞行执照图片')}</figcaption></figure>` : p.licenseFileName ? `<div class="license-thumb placeholder"><span>${icon('M4 5h16v14H4zM8 9h8M8 13h5')}</span><b>${safe(p.licenseFileName)}</b><small>当前浏览器会话未保留原图</small></div>` : '';
+    const licenseThumb = state.licenseSavedImage ? `<figure class="license-thumb">${zoomableImage(state.licenseSavedImage, '已上传的飞行执照照片', 'zoomable-image--thumb')}<figcaption>${safe(p.licenseFileName || '飞行执照图片')}</figcaption></figure>` : p.licenseFileName ? `<div class="license-thumb placeholder"><span>${icon('M4 5h16v14H4zM8 9h8M8 13h5')}</span><b>${safe(p.licenseFileName)}</b><small>当前浏览器会话未保留原图</small></div>` : '';
     return shell(`${title('飞行执照', true, 'profile')}<section class="profile-detail-card license-card"><header><div><span class="profile-kicker">飞行员执照管理</span><h2>飞行执照图片</h2></div>${status(p.license)}</header><p>${p.licenseFileName ? `已上传：${safe(p.licenseFileName)}` : '上传清晰的飞行员操作执照图片。'}</p>${licenseThumb}<button class="secondary-btn" data-action="modal" data-modal="license">${p.license === '未上传' ? '上传执照图片' : '更新执照图片'}</button></section>`, 'profile');
   };
   const profileMembers = () => {
@@ -680,7 +700,9 @@
       : '<div class="empty">暂无该飞手提交的飞行计划</div>';
     return shell(`${title('飞手详情', true, 'profile-pilots')}<div class="profile-detail-stack"><section class="profile-detail-card"><header><div><span class="profile-kicker">飞手信息</span><h2>${safe(member.name)}</h2></div>${status(member.state)}</header><div class="detail-grid"><div><span>关联关系</span><b>${safe(member.relation)}</b></div><div><span>联系电话</span><b>${safe(member.phone)}</b></div><div><span>飞行执照</span><b>${safe(member.license || '未上传')}</b></div><div><span>使用设备</span><b>${drones.length} 架</b></div><div><span>飞行计划</span><b>${flights.length} 条</b></div></div></section><section class="profile-detail-card"><header><div><span class="profile-kicker">使用设备</span><h2>分配给该飞手的设备</h2></div></header><div class="list">${droneRows}</div></section><section class="profile-detail-card"><header><div><span class="profile-kicker">飞行申报</span><h2>该飞手提交的飞行计划</h2></div></header><div class="list">${flightRows}</div></section></div>`, 'profile');
   };
-  const certificates = () => shell(`${pageToolbar('home')}${filter('搜索登记标志、序列号或产品名称')}${listActions(`<button class="secondary-btn" data-action="filter-status">${state.certificateView === '已注销' ? '查看全部' : '查看注销记录'}</button><button class="primary-btn" data-action="open-certificate-upload">上传登记证照片</button>`)}${list(roleCertificates().filter((x) => (state.certificateView === '全部' || x.state === state.certificateView) && match(`${x.id}${data.uomValue(x, 'registrationMark')}${data.uomValue(x, 'serialNumber')}${data.uomValue(x, 'aircraftName')}${x.state}`)), (x) => `<article class="list-row certificate-row"><div><strong>${safe(data.uomValue(x, 'aircraftName'))}</strong><p>登记标志 ${safe(data.uomValue(x, 'registrationMark'))}<br />序号 ${safe(data.uomValue(x, 'serialNumber'))} · 注册日期 ${safe(data.uomValue(x, 'registrationDate'))}</p><div class="meta">${certificateStatus(x.state)}</div></div><div class="row-actions"><button class="text-link" data-action="detail" data-kind="certificate" data-id="${safe(x.id)}">详情</button>${x.state !== '已注销' ? `<button class="text-link" data-action="update-certificate" data-id="${safe(x.id)}">更新</button><button class="text-link danger-text" data-action="request-cancel-certificate" data-id="${safe(x.id)}">注销</button>` : ''}</div></article>`)}`, 'services');
+  const filteredCertificates = () => roleCertificates().filter((x) => (state.certificateView === '全部' || x.state === state.certificateView) && match(`${x.id}${data.uomValue(x, 'registrationMark')}${data.uomValue(x, 'serialNumber')}${data.uomValue(x, 'aircraftName')}${x.state}`));
+  const renderCertificateRow = (x) => `<article class="list-row certificate-row"><div><strong>${safe(data.uomValue(x, 'aircraftName'))}</strong><p>登记标志 ${safe(data.uomValue(x, 'registrationMark'))}<br />序号 ${safe(data.uomValue(x, 'serialNumber'))} · 注册日期 ${safe(data.uomValue(x, 'registrationDate'))}</p><div class="meta">${certificateStatus(x.state)}</div></div><div class="row-actions"><button class="text-link" data-action="detail" data-kind="certificate" data-id="${safe(x.id)}">详情</button>${x.state !== '已注销' ? `<button class="text-link" data-action="update-certificate" data-id="${safe(x.id)}">更新</button><button class="text-link danger-text" data-action="request-cancel-certificate" data-id="${safe(x.id)}">注销</button>` : ''}</div></article>`;
+  const certificates = () => shell(`${pageToolbar('home')}${filter('搜索登记标志、序列号或产品名称')}${listActions(`<button class="secondary-btn" data-action="filter-status">${state.certificateView === '已注销' ? '查看全部' : '查看注销记录'}</button><button class="primary-btn" data-action="open-certificate-upload">上传登记证照片</button>`)}${list(filteredCertificates(), renderCertificateRow, { searchable: true })}`, 'services');
   const matchesDroneFilter = (drone) => {
     if (state.role === 'company') {
       if (state.droneGroup === '未注销') return droneRegistrationState(drone) !== '已注销';
@@ -703,13 +725,15 @@
     const mark = data.uomValue(drone, 'registrationMark');
     return !droneIsBound(drone) || !mark || mark === '—' ? '待关联' : mark;
   };
+  const filteredDrones = () => roleDrones().filter((x) => matchesDroneFilter(x) && match(`${data.uomValue(x, 'aircraftName')}${data.uomValue(x, 'serialNumber')}${data.uomValue(x, 'registrationMark')}${x.group}`));
+  const renderDroneRow = (x) => `<article class="list-row"><div><strong>${safe(data.uomValue(x, 'aircraftName'))}</strong><p>登记标志 ${safe(droneMarkLabel(x))}<br />序号 ${safe(data.uomValue(x, 'serialNumber'))}</p><div class="meta">${droneListMeta(x)}</div></div><button class="text-link" data-action="detail" data-kind="drone" data-id="${safe(x.id)}">详情</button></article>`;
   const drones = () => {
     const company = state.role === 'company';
     const tabs = company
       ? `<button class="${state.droneGroup === 'all' ? 'active' : ''}" data-action="group" data-value="all">全部</button><button class="${state.droneGroup === '未注销' ? 'active' : ''}" data-action="group" data-value="未注销">未注销</button><button class="${state.droneGroup === '已注销' ? 'active' : ''}" data-action="group" data-value="已注销">已注销</button>`
       : `<button class="${state.droneGroup === 'all' ? 'active' : ''}" data-action="group" data-value="all">全部</button><button class="${state.droneGroup === '持有设备' ? 'active' : ''}" data-action="group" data-value="持有设备">持有设备</button><button class="${state.droneGroup === '使用设备' ? 'active' : ''}" data-action="group" data-value="使用设备">使用设备</button>`;
     const droneSearch = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索产品名称、登记标志或序号" aria-label="搜索" /></div>`;
-    return shell(`${pageToolbar('home', `<div class="tabs drone-tabs">${tabs}</div>`)}${droneSearch}${list(roleDrones().filter((x) => matchesDroneFilter(x) && match(`${data.uomValue(x, 'aircraftName')}${data.uomValue(x, 'serialNumber')}${data.uomValue(x, 'registrationMark')}${x.group}`)), (x) => `<article class="list-row"><div><strong>${safe(data.uomValue(x, 'aircraftName'))}</strong><p>登记标志 ${safe(droneMarkLabel(x))}<br />序号 ${safe(data.uomValue(x, 'serialNumber'))}</p><div class="meta">${droneListMeta(x)}</div></div><button class="text-link" data-action="detail" data-kind="drone" data-id="${safe(x.id)}">详情</button></article>`)}`, 'services');
+    return shell(`${pageToolbar('home', `<div class="tabs drone-tabs">${tabs}</div>`)}${droneSearch}${list(filteredDrones(), renderDroneRow, { searchable: true })}`, 'services');
   };
   const flightTime = (item) => item.startAt && item.endAt ? `${item.startAt.replace('T', ' ')}—${item.endAt.replace('T', ' ')}` : item.time || '—';
   const flightArea = (item) => {
@@ -732,6 +756,17 @@
     return true;
   };
   const filteredFlights = () => roleFlights().filter((x) => matchesFlightFilters(x) && match(`${x.title}${x.missionNature || ''}${x.purpose || ''}${x.operator || ''}`));
+  const renderFlightRow = (x) => {
+    const company = state.role === 'company';
+    const submitter = displayCompanyName(x.operator || '—');
+    const lineExtra = company
+      ? `提交人 ${safe(submitter)}<br />设备 ${safe(x.drone || '—')}`
+      : `设备 ${safe(x.drone || '—')} · 通信联络 ${safe(x.operator || '—')}`;
+    const rowActions = company
+      ? `<button class="text-link" data-action="detail" data-kind="flight" data-id="${safe(x.id)}">详情</button>`
+      : `<div class="cluster"><button class="text-link" data-action="detail" data-kind="flight" data-id="${safe(x.id)}">详情</button>${x.executed === '未执行' ? `<button class="text-link" data-action="edit-flight" data-id="${safe(x.id)}">修改</button><button class="text-link" data-action="execute" data-id="${safe(x.id)}">确认执行</button>` : ''}</div>`;
+    return `<article class="list-row"><div><strong>${safe(x.title)}</strong><p>${safe(flightTime(x))}<br />${safe(flightArea(x))}<br />任务性质 ${safe(x.missionNature || x.purpose || '—')}<br />${lineExtra}</p><div class="meta">${status(x.executed)}</div></div>${rowActions}</article>`;
+  };
   const flights = () => {
     const company = state.role === 'company';
     const actionButtons = company ? '' : `<button class="primary-btn" data-action="open-flight-create">新增飞行计划</button><button class="secondary-btn" data-action="open-batch">批量导入</button>`;
@@ -741,27 +776,15 @@
       ? `<div class="flight-range-filter" aria-label="时间段筛选"><label><span>开始日期</span><input type="date" data-flight-range="start" value="${safe(state.flightRangeStart || '')}" /></label><label><span>结束日期</span><input type="date" data-flight-range="end" value="${safe(state.flightRangeEnd || '')}" /></label></div>`
       : '';
     const searchBar = filter(searchHint);
-    const rows = filteredFlights();
-    return shell(`${pageToolbar('home', execTabs)}${rangeFilter}${searchBar}${listActions(actionButtons)}${list(rows, (x) => {
-      const submitter = displayCompanyName(x.operator || '—');
-      const lineExtra = company
-        ? `提交人 ${safe(submitter)}<br />设备 ${safe(x.drone || '—')}`
-        : `设备 ${safe(x.drone || '—')} · 通信联络 ${safe(x.operator || '—')}`;
-      const rowActions = company
-        ? `<button class="text-link" data-action="detail" data-kind="flight" data-id="${safe(x.id)}">详情</button>`
-        : `<div class="cluster"><button class="text-link" data-action="detail" data-kind="flight" data-id="${safe(x.id)}">详情</button>${x.executed === '未执行' ? `<button class="text-link" data-action="edit-flight" data-id="${safe(x.id)}">修改</button><button class="text-link" data-action="execute" data-id="${safe(x.id)}">确认执行</button>` : ''}</div>`;
-      return `<article class="list-row"><div><strong>${safe(x.title)}</strong><p>${safe(flightTime(x))}<br />${safe(flightArea(x))}<br />任务性质 ${safe(x.missionNature || x.purpose || '—')}<br />${lineExtra}</p><div class="meta">${status(x.executed)}</div></div>${rowActions}</article>`;
-    })}`, 'services');
+    return shell(`${pageToolbar('home', execTabs)}${rangeFilter}${searchBar}${listActions(actionButtons)}${list(filteredFlights(), renderFlightRow, { searchable: true })}`, 'services');
   };
   const activityCover = (activity) => `<div class="activity-cover ${safe(activity.cover)}" aria-hidden="true"><span class="cover-orbit orbit-a"></span><span class="cover-orbit orbit-b"></span><span class="cover-drone">⌁</span><small>${safe(activity.organizer)}</small></div>`;
   const canEnroll = (activity) => activity.status === '报名中' && activity.confirmState !== '已确认' && activity.enrolled < activity.capacity;
   const enrollClosedLabel = (activity) => activity.confirmState === '已确认' ? '不可报名' : activity.enrolled >= activity.capacity ? '名额已满' : activity.status;
   const activityCard = (activity) => `<article class="activity-card"><button class="activity-card-main" data-action="activity-detail" data-id="${safe(activity.id)}">${activityCover(activity)}<div class="activity-card-body"><div class="meta-line"><span>${safe(activity.status)}</span><time>${safe(activity.startTime.slice(0, 10))}</time></div><h2>${safe(activity.title)}</h2><p>${safe(activity.summary)}</p><div class="activity-location">${icon('M12 21s7-4.35 7-11a7 7 0 1 0-14 0c0 6.65 7 11 7 11z')} ${safe(activity.place)}</div></div></button><footer><span>${state.joined.has(activity.id) ? '已报名，可查看详情' : `已报名 ${activity.enrolled}/${activity.capacity}`}</span><button class="${state.joined.has(activity.id) ? 'secondary-btn' : 'primary-btn'}" data-action="${state.joined.has(activity.id) ? 'activity-detail' : 'open-enroll'}" data-id="${safe(activity.id)}" ${!state.joined.has(activity.id) && !canEnroll(activity) ? 'disabled' : ''}>${state.joined.has(activity.id) ? '查看报名' : canEnroll(activity) ? '我要报名' : enrollClosedLabel(activity)}</button></footer></article>`;
-  const activities = () => {
-    const published = publishedActivities();
-    const visible = published.filter((item) => (!state.mineActivities || state.joined.has(item.id)) && match(`${item.title}${item.place}${item.summary}`));
-    return shell(`${pageToolbar('home')}${filter('搜索活动名称或地点')}${listActions(`<button class="secondary-btn" data-action="activity-filter">${state.mineActivities ? '查看全部' : '我的报名'}</button>`)}<div class="list activity-list">${visible.length ? visible.map(activityCard).join('') : '<div class="empty">暂无符合条件的数据</div>'}</div>`, 'services');
-  };
+  const filteredActivities = () => publishedActivities().filter((item) => (!state.mineActivities || state.joined.has(item.id)) && match(`${item.title}${item.place}${item.summary}`));
+  const renderActivitiesResults = () => filteredActivities().length ? filteredActivities().map(activityCard).join('') : '<div class="empty">暂无符合条件的数据</div>';
+  const activities = () => shell(`${pageToolbar('home')}${filter('搜索活动名称或地点')}${listActions(`<button class="secondary-btn" data-action="activity-filter">${state.mineActivities ? '查看全部' : '我的报名'}</button>`)}<div class="list activity-list" data-search-results>${renderActivitiesResults()}</div>`, 'services');
   const activityDetail = (id) => {
     const item = data.activities.find((activity) => activity.id === id) || data.activities[0];
     const joined = state.joined.has(item.id);
@@ -781,23 +804,24 @@
     const dateText = item.kind === '法规' ? (articleEffectiveText(item) || item.date) : item.date;
     return `${safe(dateText)} · ${safe(item.views)} 阅读`;
   };
-  const articleVisual = (item, featured = false) => {
+  const articleVisual = (item, featured = false, allowZoom = false) => {
     const video = isVideoArticle(item);
     if (item.coverImage) {
       const media = video
         ? `<video src="${safe(item.coverImage)}" muted playsinline></video>`
-        : `<img src="${safe(item.coverImage)}" alt="" />`;
-      return `<div class="article-visual has-cover${featured ? ' featured' : ''}" aria-hidden="true">${media}<small>${safe(item.kind)}</small>${video ? `<i>${safe(item.duration || '视频')}</i>` : ''}</div>`;
+        : (allowZoom
+          ? zoomableImage(item.coverImage, item.title || '封面图', 'zoomable-image--cover')
+          : `<img src="${safe(item.coverImage)}" alt="" />`);
+      return `<div class="article-visual has-cover${featured ? ' featured' : ''}"${allowZoom && !video ? '' : ' aria-hidden="true"'}>${media}<small>${safe(item.kind)}</small>${video ? `<i>${safe(item.duration || '视频')}</i>` : ''}</div>`;
     }
     return `<div class="article-visual ${safe(item.cover || 'rule')}${featured ? ' featured' : ''}" aria-hidden="true"><span>${video ? '▶' : item.kind === '法规' ? '规' : '讯'}</span><small>${safe(item.kind)}</small>${video ? `<i>${safe(item.duration || '视频')}</i>` : ''}</div>`;
   };
-  const knowledge = () => {
-    const articles = data.articles
-      .filter((item) => item.status !== '已下架' && (state.articleKind === 'all' || item.kind === state.articleKind) && match(`${item.title}${item.kind}${item.summary}`))
-      .slice()
-      .sort(compareArticles);
-    return shell(`${pageToolbar('home', `<div class="tabs"><button class="${state.articleKind === 'all' ? 'active' : ''}" data-action="article-kind" data-value="all">全部</button><button class="${state.articleKind === '法规' ? 'active' : ''}" data-action="article-kind" data-value="法规">法律法规</button><button class="${state.articleKind === '公告' ? 'active' : ''}" data-action="article-kind" data-value="公告">新闻公告</button></div>`)}<section class="section">${filter('搜索标题或安全提示')}<div class="knowledge-grid">${articles.map((item) => `<article class="article-card"><button data-action="article-detail" data-id="${safe(item.id)}">${articleVisual(item)}<div><div><span class="article-kind">${safe(item.kind)}</span>${isVideoArticle(item) ? `<span class="media-badge">▶ ${safe(item.duration || '视频')}</span>` : ''}</div><h2>${safe(item.title)}</h2><p>${safe(item.summary)}</p><small>${articleCardMeta(item)}</small></div></button></article>`).join('') || '<div class="empty">暂无符合条件的科普内容</div>'}</div></section>`, 'services');
-  };
+  const filteredKnowledgeArticles = () => data.articles
+    .filter((item) => item.status !== '已下架' && (state.articleKind === 'all' || item.kind === state.articleKind) && match(`${item.title}${item.kind}${item.summary}`))
+    .slice()
+    .sort(compareArticles);
+  const renderKnowledgeResults = () => filteredKnowledgeArticles().map((item) => `<article class="article-card"><button data-action="article-detail" data-id="${safe(item.id)}">${articleVisual(item)}<div><div><span class="article-kind">${safe(item.kind)}</span>${isVideoArticle(item) ? `<span class="media-badge">▶ ${safe(item.duration || '视频')}</span>` : ''}</div><h2>${safe(item.title)}</h2><p>${safe(item.summary)}</p><small>${articleCardMeta(item)}</small></div></button></article>`).join('') || '<div class="empty">暂无符合条件的科普内容</div>';
+  const knowledge = () => shell(`${pageToolbar('home', `<div class="tabs"><button class="${state.articleKind === 'all' ? 'active' : ''}" data-action="article-kind" data-value="all">全部</button><button class="${state.articleKind === '法规' ? 'active' : ''}" data-action="article-kind" data-value="法规">法律法规</button><button class="${state.articleKind === '公告' ? 'active' : ''}" data-action="article-kind" data-value="公告">新闻公告</button></div>`)}<section class="section">${filter('搜索标题或安全提示')}<div class="knowledge-grid" data-search-results>${renderKnowledgeResults()}</div></section>`, 'services');
   const articleDetail = (id) => {
     const item = data.articles.find((article) => article.id === id) || data.articles[0];
     const videoMode = isVideoArticle(item);
@@ -809,12 +833,12 @@
     const bylineDate = item.kind === '法规'
       ? (articleEffectiveText(item) || item.date)
       : item.date;
-    return shell(`${title(item.kind === '公告' ? '新闻公告' : '安全科普', true, 'knowledge')}<article class="article-detail">${!videoMode ? articleVisual(item, true) : ''}<span class="article-kind">${safe(item.kind)}</span>${videoMode ? `<span class="media-badge">▶ 视频 ${safe(item.duration || '')}</span>` : ''}<h1>${safe(item.title)}</h1><p class="article-byline">${safe(item.source)} · ${safe(bylineDate)} · ${safe(item.views)} 阅读</p>${video}<div class="article-summary">${safe(item.summary)}</div><div class="rich-content">${item.content.map((paragraph) => `<p>${safe(paragraph)}</p>`).join('')}</div></article>`, 'services');
+    return shell(`${title(item.kind === '公告' ? '新闻公告' : '安全科普', true, 'knowledge')}<article class="article-detail">${!videoMode ? articleVisual(item, true, true) : ''}<span class="article-kind">${safe(item.kind)}</span>${videoMode ? `<span class="media-badge">▶ 视频 ${safe(item.duration || '')}</span>` : ''}<h1>${safe(item.title)}</h1><p class="article-byline">${safe(item.source)} · ${safe(bylineDate)} · ${safe(item.views)} 阅读</p>${video}<div class="article-summary">${safe(item.summary)}</div><div class="rich-content">${item.content.map((paragraph) => `<p>${safe(paragraph)}</p>`).join('')}</div></article>`, 'services');
   };
   const renderFaqRichText = (content) => {
     const raw = String(content || '').trim();
     if (!raw) return '';
-    if (/<[a-z][\s\S]*>/i.test(raw)) return raw;
+    if (/<[a-z][\s\S]*>/i.test(raw)) return makeImagesZoomable(raw);
     const html = [];
     let listItems = [];
     let illustration = null;
@@ -861,32 +885,45 @@
     flushIllustration();
     return html.join('');
   };
-  const guides = () => {
-    const guideItems = (Array.isArray(data.uomGuide.guides) && data.uomGuide.guides.length ? data.uomGuide.guides : [{ id: 'GUIDE-01', title: data.uomGuide.manualTitle, summary: '', richText: data.uomGuide.manualRichText, status: '已发布', sort: 1 }])
-      .filter((item) => item.status === '已发布')
-      .slice()
-      .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.title || '').localeCompare(String(b.title || ''), 'zh'))
-      .map((item, index) => ({ ...item, sequence: index + 1 }));
-    const matchedGuides = guideItems.filter((item) => !state.guideQuery || `${item.title} ${item.summary} ${item.richText}`.toLowerCase().includes(state.guideQuery.toLowerCase()));
+  const guideCatalog = () => (Array.isArray(data.uomGuide.guides) && data.uomGuide.guides.length ? data.uomGuide.guides : [{ id: 'GUIDE-01', title: data.uomGuide.manualTitle, summary: '', richText: data.uomGuide.manualRichText, status: '已发布', sort: 1 }])
+    .filter((item) => item.status === '已发布')
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.title || '').localeCompare(String(b.title || ''), 'zh'))
+    .map((item, index) => ({ ...item, sequence: index + 1 }));
+  const matchedGuideItems = () => guideCatalog().filter((item) => !state.guideQuery || `${item.title} ${item.summary} ${item.richText}`.toLowerCase().includes(state.guideQuery.toLowerCase()));
+  const guideListState = () => {
+    const matchedGuides = matchedGuideItems();
     const mobileView = state.viewport === 'mobile';
     const guidePageSize = mobileView ? matchedGuides.length || 1 : 10;
     const guideTotalPages = Math.max(1, Math.ceil(matchedGuides.length / guidePageSize));
     state.guidePage = Math.min(state.guidePage, guideTotalPages);
     const visibleGuides = matchedGuides.slice((state.guidePage - 1) * guidePageSize, state.guidePage * guidePageSize);
-    const guidePagination = !mobileView && matchedGuides.length ? `<nav class="faq-pagination" aria-label="UOM 平台操作手册分页"><span aria-live="polite">共 ${matchedGuides.length} 条，第 ${state.guidePage}/${guideTotalPages} 页</span><div><button class="faq-page-button" data-action="guide-page" data-page="${state.guidePage - 1}"${state.guidePage === 1 ? ' disabled' : ''}>上一页</button>${Array.from({ length: guideTotalPages }, (_, index) => `<button class="faq-page-number${state.guidePage === index + 1 ? ' active' : ''}" data-action="guide-page" data-page="${index + 1}" aria-current="${state.guidePage === index + 1 ? 'page' : 'false'}">${index + 1}</button>`).join('')}<button class="faq-page-button" data-action="guide-page" data-page="${state.guidePage + 1}"${state.guidePage === guideTotalPages ? ' disabled' : ''}>下一页</button></div></nav>` : '';
-    const faqItems = data.uomGuide.faqs
-      .filter((item) => item.status === '已发布')
-      .slice()
-      .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.question || '').localeCompare(String(b.question || ''), 'zh'));
-    const matchedFaqs = faqItems.filter((item) => !state.faqQuery || `${item.question} ${item.answer}`.toLowerCase().includes(state.faqQuery.toLowerCase()));
+    return { matchedGuides, guideTotalPages, visibleGuides, mobileView };
+  };
+  const renderGuideCards = (visibleGuides) => visibleGuides.map((item) => `<article class="guide-flow-card"><header><div><span class="guide-sequence">序号：${String(item.sequence).padStart(2, '0')}</span><h2>${safe(item.title)}</h2></div><button class="secondary-btn" data-action="open-guide" data-id="${safe(item.id)}">查看详情</button></header><p>${safe(item.summary || '')}</p></article>`).join('') || '<div class="empty">暂无符合条件的操作手册</div>';
+  const renderGuidePagination = ({ matchedGuides, guideTotalPages, mobileView }) => !mobileView && matchedGuides.length ? `<nav class="faq-pagination" aria-label="UOM 平台操作手册分页"><span aria-live="polite">共 ${matchedGuides.length} 条，第 ${state.guidePage}/${guideTotalPages} 页</span><div><button class="faq-page-button" data-action="guide-page" data-page="${state.guidePage - 1}"${state.guidePage === 1 ? ' disabled' : ''}>上一页</button>${Array.from({ length: guideTotalPages }, (_, index) => `<button class="faq-page-number${state.guidePage === index + 1 ? ' active' : ''}" data-action="guide-page" data-page="${index + 1}" aria-current="${state.guidePage === index + 1 ? 'page' : 'false'}">${index + 1}</button>`).join('')}<button class="faq-page-button" data-action="guide-page" data-page="${state.guidePage + 1}"${state.guidePage === guideTotalPages ? ' disabled' : ''}>下一页</button></div></nav>` : '';
+  const faqCatalog = () => data.uomGuide.faqs
+    .filter((item) => item.status === '已发布')
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.question || '').localeCompare(String(b.question || ''), 'zh'));
+  const matchedFaqItems = () => faqCatalog().filter((item) => !state.faqQuery || `${item.question} ${item.answer}`.toLowerCase().includes(state.faqQuery.toLowerCase()));
+  const faqListState = () => {
+    const matchedFaqs = matchedFaqItems();
+    const mobileView = state.viewport === 'mobile';
     const faqPageSize = mobileView ? matchedFaqs.length || 1 : 10;
     const faqTotalPages = Math.max(1, Math.ceil(matchedFaqs.length / faqPageSize));
     state.faqPage = Math.min(state.faqPage, faqTotalPages);
     const visibleFaqs = matchedFaqs.slice((state.faqPage - 1) * faqPageSize, state.faqPage * faqPageSize);
-    const faqPagination = !mobileView && matchedFaqs.length ? `<nav class="faq-pagination" aria-label="常见问题分页"><span aria-live="polite">共 ${matchedFaqs.length} 条，第 ${state.faqPage}/${faqTotalPages} 页</span><div><button class="faq-page-button" data-action="faq-page" data-page="${state.faqPage - 1}"${state.faqPage === 1 ? ' disabled' : ''}>上一页</button>${Array.from({ length: faqTotalPages }, (_, index) => `<button class="faq-page-number${state.faqPage === index + 1 ? ' active' : ''}" data-action="faq-page" data-page="${index + 1}" aria-current="${state.faqPage === index + 1 ? 'page' : 'false'}">${index + 1}</button>`).join('')}<button class="faq-page-button" data-action="faq-page" data-page="${state.faqPage + 1}"${state.faqPage === faqTotalPages ? ' disabled' : ''}>下一页</button></div></nav>` : '';
+    return { matchedFaqs, faqTotalPages, visibleFaqs, mobileView };
+  };
+  const renderFaqRows = (visibleFaqs) => visibleFaqs.map((item) => `<article><button data-action="open-faq" data-id="${safe(item.id)}"><span>${safe(item.question)}</span><i>›</i></button></article>`).join('') || '<div class="empty">暂无符合条件的问题</div>';
+  const renderFaqPagination = ({ matchedFaqs, faqTotalPages, mobileView }) => !mobileView && matchedFaqs.length ? `<nav class="faq-pagination" aria-label="常见问题分页"><span aria-live="polite">共 ${matchedFaqs.length} 条，第 ${state.faqPage}/${faqTotalPages} 页</span><div><button class="faq-page-button" data-action="faq-page" data-page="${state.faqPage - 1}"${state.faqPage === 1 ? ' disabled' : ''}>上一页</button>${Array.from({ length: faqTotalPages }, (_, index) => `<button class="faq-page-number${state.faqPage === index + 1 ? ' active' : ''}" data-action="faq-page" data-page="${index + 1}" aria-current="${state.faqPage === index + 1 ? 'page' : 'false'}">${index + 1}</button>`).join('')}<button class="faq-page-button" data-action="faq-page" data-page="${state.faqPage + 1}"${state.faqPage === faqTotalPages ? ' disabled' : ''}>下一页</button></div></nav>` : '';
+  const guides = () => {
+    const guideState = guideListState();
+    const faqState = faqListState();
     const tabs = `<div class="tabs guide-tabs" aria-label="UOM 平台内容分类"><button class="${state.guideTab === 'manual' ? 'active' : ''}" data-action="guide-tab" data-value="manual">UOM 平台操作手册</button><button class="${state.guideTab === 'faq' ? 'active' : ''}" data-action="guide-tab" data-value="faq">常见问题解答</button></div>`;
-    const manual = `<section class="guide-manual-section"><label class="faq-search"><span>${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 4 4')}</span><input id="guide-search" value="${safe(state.guideQuery)}" placeholder="搜索操作手册标题或内容" aria-label="搜索操作手册" /></label><section class="guide-flow-list">${visibleGuides.map((item) => `<article class="guide-flow-card"><header><div><span class="guide-sequence">序号：${String(item.sequence).padStart(2, '0')}</span><h2>${safe(item.title)}</h2></div><button class="secondary-btn" data-action="open-guide" data-id="${safe(item.id)}">查看详情</button></header><p>${safe(item.summary || '')}</p></article>`).join('') || '<div class="empty">暂无符合条件的操作手册</div>'}</section>${guidePagination}</section>`;
-    const faq = `<section class="section guide-faq-section"><label class="faq-search"><span>${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 4 4')}</span><input id="faq-search" value="${safe(state.faqQuery)}" placeholder="搜索问题关键词" aria-label="搜索常见问题" /></label><div class="faq-list faq-modal-list">${visibleFaqs.map((item) => `<article><button data-action="open-faq" data-id="${safe(item.id)}"><span>${safe(item.question)}</span><i>›</i></button></article>`).join('') || '<div class="empty">暂无符合条件的问题</div>'}</div>${faqPagination}</section>`;
+    const manual = `<section class="guide-manual-section"><label class="faq-search"><span>${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 4 4')}</span><input id="guide-search" value="${safe(state.guideQuery)}" placeholder="搜索操作手册标题或内容" aria-label="搜索操作手册" /></label><section class="guide-flow-list" data-guide-search-results>${renderGuideCards(guideState.visibleGuides)}</section><div data-guide-search-pagination>${renderGuidePagination(guideState)}</div></section>`;
+    const faq = `<section class="section guide-faq-section"><label class="faq-search"><span>${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 4 4')}</span><input id="faq-search" value="${safe(state.faqQuery)}" placeholder="搜索问题关键词" aria-label="搜索常见问题" /></label><div class="faq-list faq-modal-list" data-faq-search-results>${renderFaqRows(faqState.visibleFaqs)}</div><div data-faq-search-pagination>${renderFaqPagination(faqState)}</div></section>`;
     return shell(`${pageToolbar('home', tabs)}${state.guideTab === 'manual' ? manual : faq}`, 'services');
   };
   const messages = () => {
@@ -971,11 +1008,12 @@
     const droneActions = kind === 'drone' && state.role === 'company' && canManageEnterprise() && droneRegistrationState(item) !== '已注销'
       ? `<button class="${bindCertificateAction ? 'secondary-btn' : 'primary-btn'}" data-action="modal" data-modal="assign-pilot" data-id="${safe(item.id)}">${assignedPilot ? '重新分配飞手' : '分配给飞手'}</button>${assignedPilot ? `<button class="secondary-btn" data-action="unassign-drone" data-id="${safe(item.id)}">取消分配</button>` : ''}`
       : '';
-    const certificateImageField = kind === 'certificate' ? `<div class="certificate-field"><span>登记证截图</span><b><img class="certificate-field-image" src="${safe(item.certificateImageUrl || '../../shared/assets/uom-registration-certificate.svg')}" alt="已上传的 UOM 登记证截图" /></b></div>` : '';
+    const certificateSrc = item.certificateImageUrl || '../../shared/assets/uom-registration-certificate.svg';
+    const certificateImageField = kind === 'certificate' ? `<div class="certificate-field"><span>登记证截图</span><b>${zoomableImage(certificateSrc, '已上传的 UOM 登记证截图', 'zoomable-image--thumb', 'certificate-field-image')}</b></div>` : '';
     return shell(`${title(detailTitle, true, fallback)}<section class="detail-grid">${rows.map(([k,v]) => `<div><span>${safe(k)}</span><b>${safe(v)}</b></div>`).join('')}${certificateImageField}</section><div class="actions${canConfirmFlight ? ' detail-actions' : ''}">${flightActions}${bindCertificateAction}${droneActions}</div>`, 'services');
   };
   const ocrLabels = { registrationMark:'登记标志', manufacturerModel:'航空器型号和制造人', serialNumber:'序号', aircraftName:'产品名称', emptyWeight:'空机重量', maxTakeoffWeight:'最大起飞重量', aircraftType:'类型', issuedTo:'本证发给', mobilePhone:'联系手机', registrationStatus:'状态', registrationDate:'注册日期' };
-  const certificatePreview = () => state.ocr.image ? `<img class="certificate-preview-image" src="${state.ocr.image}" alt="已上传的 UOM 登记证" />` : `<div class="certificate-placeholder" aria-label="UOM 登记证字段示意"><b>中国民用航空局</b><strong>无人机实名登记证</strong><span>CERTIFICATE OF UAS REGISTRATION</span><i>登记信息图片</i></div>`;
+  const certificatePreview = () => state.ocr.image ? zoomableImage(state.ocr.image, '已上传的 UOM 登记证', 'zoomable-image--block', 'certificate-preview-image') : `<div class="certificate-placeholder" aria-label="UOM 登记证字段示意"><b>中国民用航空局</b><strong>无人机实名登记证</strong><span>CERTIFICATE OF UAS REGISTRATION</span><i>登记信息图片</i></div>`;
   const certificateModalBody = () => {
     if (state.ocr.status === 'recognizing') return `<div class="recognition-state">${certificatePreview()}<span class="recognition-loader" aria-hidden="true"></span><h3>正在识别登记证</h3><p>正在提取登记标志、序列号、机型及权属信息…</p></div>`;
     if (state.ocr.status === 'review') return `<div class="ocr-workspace"><aside class="certificate-preview">${certificatePreview()}<div class="recognition-success">${icon('M5 12l4 4L19 6')}<span><b>识别完成</b><small>请核对后保存</small></span></div></aside><form class="ocr-form" id="ocr-form">${Object.entries(ocrLabels).map(([key,label]) => {
@@ -1215,7 +1253,7 @@
     if (type === 'license') {
       const p = data.profiles.personal;
       const previewImage = state.licenseImage || state.licenseSavedImage;
-      const preview = previewImage ? `<img class="license-preview-image" src="${previewImage}" alt="已选择的飞行执照图片" />` : `<div class="license-preview-placeholder"><b>飞行员操作执照</b><span>${p.licenseFileName ? safe(p.licenseFileName) : '请选择 JPG 或 PNG 图片'}</span></div>`;
+      const preview = previewImage ? zoomableImage(previewImage, '已选择的飞行执照图片', 'zoomable-image--block', 'license-preview-image') : `<div class="license-preview-placeholder"><b>飞行员操作执照</b><span>${p.licenseFileName ? safe(p.licenseFileName) : '请选择 JPG 或 PNG 图片'}</span></div>`;
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">飞行员执照管理</h2><div class="license-upload">${preview}<label class="upload-drop" for="license-file"><input id="license-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span><b>选择执照图片</b><small>支持 JPG、PNG，单张不超过 10 MB</small><em>上传图片</em></label></div><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-license">确认提交</button></div></section></div>`;
     }
     if (type === 'flight') {
@@ -1306,6 +1344,54 @@
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+  };
+  const patchSearchResults = () => {
+    const host = document.querySelector('#app [data-search-results]');
+    if (!host) return false;
+    const name = route().split('/')[0];
+    if (name === 'knowledge') {
+      host.innerHTML = renderKnowledgeResults();
+      return true;
+    }
+    if (name === 'activities') {
+      host.innerHTML = renderActivitiesResults();
+      return true;
+    }
+    if (name === 'certificates') {
+      const rows = filteredCertificates();
+      host.innerHTML = rows.length ? rows.map(renderCertificateRow).join('') : '<div class="empty">暂无符合条件的数据</div>';
+      return true;
+    }
+    if (name === 'drones') {
+      const rows = filteredDrones();
+      host.innerHTML = rows.length ? rows.map(renderDroneRow).join('') : '<div class="empty">暂无符合条件的数据</div>';
+      return true;
+    }
+    if (name === 'flights') {
+      const rows = filteredFlights();
+      host.innerHTML = rows.length ? rows.map(renderFlightRow).join('') : '<div class="empty">暂无符合条件的数据</div>';
+      return true;
+    }
+    return false;
+  };
+  const patchGuideSearchResults = () => {
+    if (route().split('/')[0] !== 'guides') return false;
+    if (state.guideTab === 'manual') {
+      const listHost = document.querySelector('#app [data-guide-search-results]');
+      const pageHost = document.querySelector('#app [data-guide-search-pagination]');
+      if (!listHost) return false;
+      const guideState = guideListState();
+      listHost.innerHTML = renderGuideCards(guideState.visibleGuides);
+      if (pageHost) pageHost.innerHTML = renderGuidePagination(guideState);
+      return true;
+    }
+    const listHost = document.querySelector('#app [data-faq-search-results]');
+    const pageHost = document.querySelector('#app [data-faq-search-pagination]');
+    if (!listHost) return false;
+    const faqState = faqListState();
+    listHost.innerHTML = renderFaqRows(faqState.visibleFaqs);
+    if (pageHost) pageHost.innerHTML = renderFaqPagination(faqState);
+    return true;
   };
   const render = () => {
     const current = route();
@@ -1693,6 +1779,16 @@
       render();
     }
     if (action === 'close-modal') closeModal();
+    if (action === 'preview-image') {
+      state.imagePreview = { src: target.dataset.src || '', alt: target.dataset.alt || '图片预览' };
+      render();
+      return;
+    }
+    if (action === 'close-image-preview') {
+      state.imagePreview = null;
+      render();
+      return;
+    }
     if (action === 'reset-ocr') { state.ocrRequest += 1; state.ocr = emptyOcr(); render(); }
     if (action === 'confirm-ocr') {
       const form = document.querySelector('#ocr-form'); if (form && !form.reportValidity()) return;
@@ -1883,8 +1979,8 @@
     if (action === 'guide-tab') { state.guideTab = target.dataset.value === 'faq' ? 'faq' : 'manual'; render(); }
     if (action === 'open-guide') { state.selectedGuide = target.dataset.id; state.modal = 'guide-detail'; state.returnFocus = `[data-action="open-guide"][data-id="${safe(target.dataset.id)}"]`; render(); }
     if (action === 'open-faq') { state.selectedFaq = target.dataset.id; state.modal = 'faq-detail'; state.returnFocus = `[data-action="open-faq"][data-id="${safe(target.dataset.id)}"]`; render(); }
-    if (action === 'guide-page') { state.guidePage = Math.max(1, Number(target.dataset.page) || 1); render(); }
-    if (action === 'faq-page') { state.faqPage = Math.max(1, Number(target.dataset.page) || 1); render(); }
+    if (action === 'guide-page') { state.guidePage = Math.max(1, Number(target.dataset.page) || 1); if (!patchGuideSearchResults()) render(); return; }
+    if (action === 'faq-page') { state.faqPage = Math.max(1, Number(target.dataset.page) || 1); if (!patchGuideSearchResults()) render(); return; }
   });
   document.addEventListener('input', (event) => {
     if (event.target.dataset?.ocrField) state.ocr.values[event.target.dataset.ocrField] = event.target.value;
@@ -1897,9 +1993,23 @@
       state.supplementDraft[field] = event.target.value;
     }
     if (event.target.dataset?.companyField) state.companyDraft[event.target.dataset.companyField] = event.target.value;
-    if (event.target.id === 'search') { state.query = event.target.value; render(); const search = document.querySelector('#search'); if (search) { search.focus(); search.setSelectionRange(state.query.length, state.query.length); } }
-    if (event.target.id === 'guide-search') { state.guideQuery = event.target.value; state.guidePage = 1; render(); const search = document.querySelector('#guide-search'); if (search) { search.focus(); search.setSelectionRange(state.guideQuery.length, state.guideQuery.length); } }
-    if (event.target.id === 'faq-search') { state.faqQuery = event.target.value; state.faqPage = 1; render(); const search = document.querySelector('#faq-search'); if (search) { search.focus(); search.setSelectionRange(state.faqQuery.length, state.faqQuery.length); } }
+    if (event.target.id === 'search') {
+      state.query = event.target.value;
+      if (!patchSearchResults()) render();
+      return;
+    }
+    if (event.target.id === 'guide-search') {
+      state.guideQuery = event.target.value;
+      state.guidePage = 1;
+      if (!patchGuideSearchResults()) render();
+      return;
+    }
+    if (event.target.id === 'faq-search') {
+      state.faqQuery = event.target.value;
+      state.faqPage = 1;
+      if (!patchGuideSearchResults()) render();
+      return;
+    }
   });
   document.addEventListener('change', (event) => {
     if (event.target.dataset?.ocrField) { state.ocr.values[event.target.dataset.ocrField] = event.target.value; return; }
@@ -1949,8 +2059,9 @@
       if (key === 'end') state.flightRangeEnd = event.target.value || '';
       if (state.flightRangeStart && state.flightRangeEnd && state.flightRangeStart > state.flightRangeEnd) {
         announce('开始日期不能晚于结束日期');
+        return;
       }
-      render();
+      if (!patchSearchResults()) render();
       return;
     }
     if (event.target.id === 'flight-approval-file') {
@@ -2044,6 +2155,12 @@
     reader.readAsDataURL(file);
   });
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.imagePreview) {
+      event.preventDefault();
+      state.imagePreview = null;
+      render();
+      return;
+    }
     if (!state.modal) return;
     if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
     if (event.key !== 'Tab') return;

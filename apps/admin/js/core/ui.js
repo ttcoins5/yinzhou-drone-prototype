@@ -127,6 +127,23 @@
     actionText = '选择图片'
   }) => `<div class="cover-upload">${previewHtml}<label class="upload-drop slim" for="${escape(id)}"><input id="${escape(id)}" type="file" accept="${escape(accept)}" /><b>${escape(label)}</b><small>${escape(hint)}</small><em>${escape(actionText)}</em></label></div>`;
 
+  const zoomableImage = (src, alt = '图片预览', className = '', imgClass = '') => {
+    if (!src) return '';
+    return `<button type="button" class="zoomable-image${className ? ` ${className}` : ''}" data-action="preview-image" data-src="${escape(src)}" data-alt="${escape(alt || '图片预览')}" aria-label="点击放大查看"><img${imgClass ? ` class="${escape(imgClass)}"` : ''} src="${escape(src)}" alt="${escape(alt || '')}" /></button>`;
+  };
+
+  const makeImagesZoomable = (html) => String(html || '').replace(/<img\b([^>]*?)\/?>/giu, (full, attrs) => {
+    if (/\bdata-no-zoom\b/i.test(attrs) || /\bzoomable-image\b/i.test(full)) return full;
+    const srcMatch = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+    const src = srcMatch ? (srcMatch[1] || srcMatch[2] || srcMatch[3] || '') : '';
+    if (!src) return full;
+    const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+    const alt = altMatch ? (altMatch[1] || altMatch[2] || altMatch[3] || '图片预览') : '图片预览';
+    const classMatch = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs);
+    const imgClass = classMatch ? (classMatch[1] || classMatch[2] || '') : '';
+    return zoomableImage(src, alt, 'zoomable-image--inline', imgClass);
+  });
+
   const sortStepper = (field = 'sort', value = 1, { min = 1 } = {}) => {
     const current = Math.max(min, Number(value) || min);
     return `<div class="sort-stepper" role="group" aria-label="排序"><button type="button" class="sort-step-btn" data-action="sort-step" data-field="${escape(field)}" data-delta="-1" aria-label="减小排序">−</button><input required type="number" min="${min}" data-draft-field="${escape(field)}" value="${escape(String(current))}" /><button type="button" class="sort-step-btn" data-action="sort-step" data-field="${escape(field)}" data-delta="1" aria-label="增大排序">+</button></div>`;
@@ -149,6 +166,8 @@
     enrollFieldTable,
     uploadField,
     sortStepper,
-    field
+    field,
+    zoomableImage,
+    makeImagesZoomable
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

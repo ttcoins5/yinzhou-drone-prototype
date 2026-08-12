@@ -157,7 +157,9 @@
       const coverPreview = draft.coverImage
         ? (isVideoCover
           ? `<video class="cover-upload-preview" src="${safe(draft.coverImage)}" muted playsinline controls></video>`
-          : `<img class="cover-upload-preview" src="${safe(draft.coverImage)}" alt="封面预览" />`)
+          : (UI()?.zoomableImage
+            ? UI().zoomableImage(draft.coverImage, '封面预览', 'zoomable-image--thumb', 'cover-upload-preview')
+            : `<img class="cover-upload-preview" src="${safe(draft.coverImage)}" alt="封面预览" />`))
         : `<div class="cover-upload-placeholder"><b>封面预览</b><span>支持图片/视频</span></div>`;
       const coverUpload = ui.uploadField({
         id: 'content-cover-file',

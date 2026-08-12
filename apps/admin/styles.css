@@ -39,6 +39,19 @@
 .cover-upload{display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;align-items:stretch}
 .cover-upload-preview{display:block;width:140px;height:96px;object-fit:cover;border:1px solid var(--line);border-radius:8px;background:#f5f8fb}
 .content-cover-media{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin:0 0 14px;background:#0f2740}
+.zoomable-image{appearance:none;-webkit-appearance:none;margin:0;padding:0;border:0;background:transparent;cursor:zoom-in;display:inline-block;line-height:0;max-width:100%;font:inherit;color:inherit}
+.zoomable-image img{display:block;max-width:100%}
+.zoomable-image--block,.zoomable-image--cover-block{display:block;width:100%}
+.zoomable-image--cover-block{margin:0 0 14px}
+.zoomable-image--cover-block .content-cover-media{margin:0}
+.zoomable-image--thumb{display:inline-block}
+.zoomable-image--inline{display:block;margin:8px 0}
+.cover-upload .zoomable-image--thumb{width:140px}
+.image-preview-layer{position:fixed;z-index:120;inset:0;display:grid;place-items:center;padding:24px}
+.image-preview-backdrop{position:absolute;inset:0;border:0;padding:0;background:rgba(8,22,38,.78);cursor:pointer}
+.image-preview-panel{position:relative;z-index:1;margin:0;max-width:min(100%,980px);max-height:min(90vh,calc(100% - 48px));display:grid;place-items:center}
+.image-preview-panel img{display:block;max-width:100%;max-height:min(85vh,calc(100% - 48px));width:auto;height:auto;object-fit:contain;border-radius:8px;background:#fff;box-shadow:0 16px 48px rgba(0,0,0,.35)}
+.image-preview-close{position:absolute;top:-12px;right:-12px;width:36px;height:36px;border:0;border-radius:50%;background:#fff;color:#12385e;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 .cover-upload-placeholder{display:grid;place-content:center;gap:4px;width:140px;height:96px;border:1px dashed #8dbde0;border-radius:8px;background:#f5f8fb;color:var(--muted);text-align:center}
 .cover-upload-placeholder b{font-size:12px;color:var(--ink)}
 .cover-upload-placeholder span{font-size:11px}
