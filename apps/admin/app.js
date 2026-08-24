@@ -997,15 +997,11 @@
     return `<div class="range-filter range-filter--board${state.areaRange === 'custom' ? ' is-custom' : ''}" aria-label="飞行报备统计时间段筛选"><div class="range-chips">${chips}</div>${custom}</div>`;
   };
   const dashboardFlightToolbar = () => `<div class="dashboard-flight-toolbar${state.areaRange === 'custom' ? ' is-custom' : ''}"><p class="range-hint">当前统计时间段：<b>${safe(areaRangeLabel())}</b></p><div data-dashboard-area-filter>${areaRangeFilter()}</div></div>`;
-  const distRowTones = ['blue', 'teal', 'amber', 'violet', 'rose', 'slate'];
   const sortieTones = ['blue', 'teal', 'slate'];
   const distListPanel = (rows, kind, emptyText) => {
     const active = state.dashboardPick?.kind === kind ? state.dashboardPick.id : '';
     if (!rows.length) return `<div class="empty dist-empty">${safe(emptyText)}</div>`;
-    return `<div class="dist-list" data-count="${rows.length}">${rows.map((item, index) => {
-      const tone = distRowTones[index % distRowTones.length];
-      return `<button type="button" class="dist-row dist-row--${tone} is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="${kind}" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span class="dist-rank">${index + 1}</span><div class="dist-main"><span class="dist-label">${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div></div><b class="dist-value">${item.count}</b></button>`;
-    }).join('')}</div>`;
+    return `<div class="dist-list" data-count="${rows.length}">${rows.map((item, index) => `<button type="button" class="dist-row is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="${kind}" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span class="dist-rank">${index + 1}</span><div class="dist-main"><span class="dist-label">${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div></div><b class="dist-value">${item.count}</b></button>`).join('')}</div>`;
   };
   const areaDistributionPanel = () => distListPanel(takeoffDistributionRows(), 'area', '所选时间段暂无起飞地报备数据');
   const activityTypeStatsPanel = () => distListPanel(activityTypeDistributionRows(), 'activity-type', '所选时间段暂无飞行活动类型数据');
