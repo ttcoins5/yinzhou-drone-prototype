@@ -89,13 +89,15 @@
           province: src?.province,
           city: src?.city,
           district: src?.district,
-          addressDetail: src?.addressDetail || src?.street || ''
+          street: src?.street,
+          addressDetail: src?.addressDetail || ''
         })
         : {
           province: src?.province || '浙江省',
           city: src?.city || '宁波市',
           district: src?.district || '',
-          addressDetail: src?.addressDetail || src?.street || ''
+          street: src?.street || src?.addressDetail || '',
+          addressDetail: src?.addressDetail || ''
         };
       return src
         ? {
@@ -105,7 +107,8 @@
           province: address.province || '浙江省',
           city: address.city || '宁波市',
           district: address.district || '',
-          addressDetail: address.addressDetail || src?.street || '',
+          street: address.street || '',
+          addressDetail: address.addressDetail || '',
           area: src.area || '',
           confirmedAt: src.confirmedAt || '',
           userId: src.userId || '',
@@ -115,9 +118,10 @@
           name: '',
           phone: '',
           volunteerType: '低空爱好者',
-          province: '',
-          city: '',
+          province: '浙江省',
+          city: '宁波市',
           district: '',
+          street: '',
           addressDetail: '',
           area: '',
           confirmedAt: '',
@@ -210,6 +214,16 @@
     return `<div class="region-cascade-row"><div class="region-cascade-side">${cascader}</div><div class="region-cascade-detail">${input('addressDetail', { required: Boolean(opts.requiredDetail), placeholder: '请填写详细地址，如街道、路名门牌号' })}</div></div>`;
   };
 
+  const addressConfigRow = (draft, mock, ui, input, opts = {}) => {
+    const cascader = ui?.addressCascader
+      ? ui.addressCascader(draft, mock, {
+        open: Boolean(opts.addressCascaderOpen),
+        active: opts.addressCascaderActive || {}
+      })
+      : '';
+    return `<div class="region-cascade-row"><div class="region-cascade-side">${cascader}</div><div class="region-cascade-detail">${input('addressDetail', { required: Boolean(opts.requiredDetail), placeholder: '请填写详细地址，如路名门牌号' })}</div></div>`;
+  };
+
   const renderBody = (key, draft, safe, opts = {}) => {
     const rich = RE();
     const ui = UI();
@@ -262,10 +276,9 @@
     }
     if (key === 'volunteers') {
       const mock = (typeof window !== 'undefined' && window.LowAltitudeMock) || {};
-      const addressField = regionAddressRow(draft, mock, ui, input, {
-        regionCascaderOpen: opts.regionCascaderOpen,
-        regionCascaderActive: opts.regionCascaderActive,
-        useAddressDistricts: true,
+      const addressField = addressConfigRow(draft, mock, ui, input, {
+        addressCascaderOpen: opts.addressCascaderOpen,
+        addressCascaderActive: opts.addressCascaderActive,
         requiredDetail: true
       });
       const isNew = Boolean(opts.isNew);
@@ -375,12 +388,12 @@
     verification: ['新增核查', '编辑核查记录', '']
   };
 
-  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false, users = [], volunteers = [], deviceQuery = '', userQuery = '', pickerPage = 1, regionCascaderOpen = false, regionCascaderActive = {} }) => {
+  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false, users = [], volunteers = [], deviceQuery = '', userQuery = '', pickerPage = 1, regionCascaderOpen = false, regionCascaderActive = {}, addressCascaderOpen = false, addressCascaderActive = {} }) => {
     const isNew = !id || id === 'new';
     const meta = titles[key] || ['新建', '编辑', ''];
     const title = isNew ? meta[0] : meta[1];
     const preview = ['activities', 'laws', 'news', 'guides', 'faq'].includes(key);
-    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields, isNew, users, volunteers, deviceQuery, userQuery, pickerPage, regionCascaderOpen, regionCascaderActive });
+    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields, isNew, users, volunteers, deviceQuery, userQuery, pickerPage, regionCascaderOpen, regionCascaderActive, addressCascaderOpen, addressCascaderActive });
     const page = FP().render({
       title,
       description: meta[2],

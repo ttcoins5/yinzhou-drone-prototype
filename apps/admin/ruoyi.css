@@ -57,9 +57,9 @@
 .top-actions { gap: 10px; color: #606266; }
 .top-actions > b { font-size: 13px; font-weight: 400; }
 .proto { min-height: 24px; padding: 2px 7px; border-color: #b3d8ff; border-radius: 3px; color: var(--primary); font-size: 11px; font-weight: 500; }
-.top-icon, .tab-more { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #606266; font: 18px/1 system-ui; cursor: pointer; }
-.top-icon svg, .tab-more svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-.top-icon:hover, .tab-more:hover { background: #f5f7fa; color: var(--primary); }
+.top-icon { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #606266; font: 18px/1 system-ui; cursor: pointer; }
+.top-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.top-icon:hover { background: #f5f7fa; color: var(--primary); }
 .avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 3px; background: #ecf5ff; color: var(--primary); font-size: 12px; font-weight: 600; }
 .top-user { border-inline-start-color: var(--line); }
 .logout-btn { border-color: #dcdfe6; border-radius: 3px; color: #606266; }
@@ -73,14 +73,12 @@
 .route-tabs { display: flex; min-width: 0; height: 38px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .route-tabs-scroll { display: flex; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-left: 10px; }
 .route-tab { display: inline-flex; align-items: center; min-width: max-content; height: 32px; margin: 3px 3px 3px 0; border: 1px solid #d8dce5; border-radius: 2px; background: var(--surface); color: #606266; font: 12px inherit; }
-.route-tab-select { height: 30px; padding: 0 6px 0 10px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.route-tab-link { height: 30px; padding: 0 10px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
 .route-tab.active { border-color: var(--primary); background: var(--primary); color: #fff; }
 .route-tab:hover:not(.active) { border-color: #b3d8ff; color: var(--primary); }
 .tab-close { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 3px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: 15px/1 system-ui; cursor: pointer; }
 .tab-close:hover { background: rgba(255,255,255,.24); }
 .route-tab:not(.active) .tab-close:hover { background: #c0c4cc; color: #fff; }
-.tab-more { width: 38px; height: 37px; border-left: 1px solid var(--line); font-size: 15px; }
-
 .page-body { padding: 18px 20px 36px; }
 .page-heading { align-items: center; margin-bottom: 16px; }
 .page-heading h1 { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: 0; }
@@ -108,8 +106,15 @@
 .panel-body { padding: 16px; }
 .label { color: #909399; font-weight: 400; letter-spacing: 0; }
 .map, .map-legend { border-radius: 2px; }
-.filter-bar { gap: 8px; margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+.filter-bar .filter-field { display: inline-flex; align-items: center; gap: 8px; flex: none; margin: 0; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.filter-bar .filter-field > span { flex: none; color: #606266; font-size: 13px; line-height: 32px; }
 .filter-bar input, .filter-bar select { min-height: 32px; border-color: #dcdfe6; border-radius: 3px; font-size: 12px; }
+.filter-bar .filter-field input, .filter-bar .filter-field select { width: 140px; flex: none; padding: 0 10px; border: 1px solid #dcdfe6; background: #fff; color: var(--ink); font: 12px/1.2 inherit; box-sizing: border-box; }
+.filter-bar .filter-field-grow input { width: 200px; }
+.filter-bar .filter-field .admin-cascader { width: 240px; flex: none; }
+.filter-bar .filter-field .admin-cascader-trigger { width: 100%; min-height: 32px; padding: 0 10px; border: 1px solid #dcdfe6; border-radius: 3px; background: #fff; font-size: 12px; box-sizing: border-box; }
+.filter-bar .filter-actions { display: inline-flex; gap: 8px; flex: none; align-items: center; }
 .filter-bar input:focus, .filter-bar select:focus, .form-stack input:focus, .form-stack select:focus, .form-stack textarea:focus { border-color: var(--primary); outline: 0; box-shadow: 0 0 0 2px rgba(64,158,255,.14); }
 .data-table { font-size: 13px; }
 .data-table th, .data-table td { padding: 12px 14px; border-bottom-color: var(--line); }
@@ -305,24 +310,29 @@
 .sys-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: flex-end;
+  gap: 10px 14px;
+  align-items: center;
   margin: 0 0 12px;
-  padding: 16px 16px 8px;
+  padding: 12px 16px 8px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 4px;
 }
 .sys-filter label {
-  display: grid;
-  gap: 6px;
-  min-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin: 0;
   font-size: 13px;
   color: var(--ink);
+  white-space: nowrap;
 }
-.sys-filter label > span { color: #606266; font-size: 13px; }
+.sys-filter label > span { flex: none; color: #606266; font-size: 13px; line-height: 32px; }
 .sys-filter input,
 .sys-filter select {
+  width: 140px;
+  flex: none;
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid #dcdfe6;
@@ -330,9 +340,10 @@
   background: #fff;
   color: var(--ink);
   font: 13px/1.2 inherit;
+  box-sizing: border-box;
 }
 .sys-date-range {
-  min-width: 280px !important;
+  width: auto !important;
 }
 .sys-date-range > div,
 .sys-filter .sys-date-range {
@@ -340,13 +351,14 @@
   align-items: center;
   gap: 8px;
 }
-.sys-date-range input { flex: 1; min-width: 0; }
+.sys-date-range input { width: 132px; flex: none; min-width: 0; }
 .sys-date-range i { font-style: normal; color: var(--muted); }
 .sys-filter-actions {
-  display: flex;
+  display: inline-flex;
   gap: 8px;
-  margin-left: auto;
-  padding-bottom: 8px;
+  flex: none;
+  align-items: center;
+  padding-bottom: 0;
 }
 .sys-toolbar {
   display: flex;

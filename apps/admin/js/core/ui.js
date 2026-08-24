@@ -188,6 +188,59 @@
     return `<div class="admin-cascader${open ? ' is-open' : ''}"><button type="button" class="admin-cascader-trigger${label ? '' : ' is-placeholder'}" data-action="toggle-region-cascader" aria-expanded="${open ? 'true' : 'false'}"><span>${escape(label || '请选择省 / 市 / 区')}</span><i class="admin-cascader-caret" aria-hidden="true"></i></button><div class="${panelClass}"><div class="admin-cascader-menu" role="listbox" aria-label="省">${provinceMenu}</div>${activeProvince ? `<div class="admin-cascader-menu admin-cascader-menu--city" role="listbox" aria-label="市">${cityMenu}</div>` : ''}${activeProvince && activeCity ? `<div class="admin-cascader-menu admin-cascader-menu--district" role="listbox" aria-label="区">${districtMenu}</div>` : ''}</div><input type="hidden" data-draft-field="province" value="${escape(draft.province || '')}" /><input type="hidden" data-draft-field="city" value="${escape(draft.city || '')}" /><input type="hidden" data-draft-field="district" value="${escape(draft.district || '')}" /></div>`;
   };
 
+  const addressCascader = (draft = {}, mock = {}, opts = {}) => {
+    const open = Boolean(opts.open);
+    const active = opts.active || {};
+    const province = '浙江省';
+    const defaultCity = '宁波市';
+    const activeCity = String(active.city || defaultCity).trim() || defaultCity;
+    const activeDistrict = String(active.district || '').trim();
+    const activeStreet = String(active.street || '').trim();
+    const cities = [defaultCity];
+    const districts = mock.addressDistrictOptions ? (mock.addressDistrictOptions(province, defaultCity) || []) : [];
+    const streets = activeDistrict && mock.addressStreetOptions ? (mock.addressStreetOptions(activeDistrict) || []) : [];
+    const label = draft.city && draft.district && draft.street
+      ? [draft.city, draft.district, draft.street].join(' / ')
+      : '';
+    const node = (level, value, selected, hasChildren) => `<button type="button" class="admin-cascader-node${selected ? ' is-active' : ''}${hasChildren ? ' has-children' : ''}" data-action="pick-address-cascader" data-level="${escape(level)}" data-value="${escape(value)}"><span>${escape(value)}</span>${hasChildren ? '<i aria-hidden="true"></i>' : ''}</button>`;
+    const menu = (items, renderItem) => items.length
+      ? items.map(renderItem).join('')
+      : '<span class="admin-cascader-empty">暂无选项</span>';
+    const cityMenu = menu(cities, (item) => node('city', item, item === activeCity, true));
+    const districtMenu = menu(districts, (item) => node('district', item, item === activeDistrict, true));
+    const streetMenu = menu(streets, (item) => node('street', item, item === activeStreet, false));
+    const panelClass = ['admin-cascader-panel', activeCity ? 'has-city' : '', activeCity && activeDistrict ? 'has-district' : ''].filter(Boolean).join(' ');
+    return `<div class="admin-cascader admin-cascader--address${open ? ' is-open' : ''}"><button type="button" class="admin-cascader-trigger${label ? '' : ' is-placeholder'}" data-action="toggle-address-cascader" aria-expanded="${open ? 'true' : 'false'}"><span>${escape(label || '请选择市 / 区 / 街道')}</span><i class="admin-cascader-caret" aria-hidden="true"></i></button><div class="${panelClass}"><div class="admin-cascader-menu" role="listbox" aria-label="市">${cityMenu}</div>${activeCity ? `<div class="admin-cascader-menu admin-cascader-menu--district" role="listbox" aria-label="区">${districtMenu}</div>` : ''}${activeCity && activeDistrict ? `<div class="admin-cascader-menu admin-cascader-menu--street" role="listbox" aria-label="街道">${streetMenu}</div>` : ''}</div><input type="hidden" data-draft-field="province" value="${escape(draft.province || province)}" /><input type="hidden" data-draft-field="city" value="${escape(draft.city || defaultCity)}" /><input type="hidden" data-draft-field="district" value="${escape(draft.district || '')}" /><input type="hidden" data-draft-field="street" value="${escape(draft.street || '')}" /></div>`;
+  };
+
+  const addressFilterCascader = (value = {}, mock = {}, opts = {}) => {
+    const open = Boolean(opts.open);
+    const active = opts.active || {};
+    const toggleAction = escape(opts.toggleAction || 'toggle-address-filter');
+    const pickAction = escape(opts.pickAction || 'pick-address-filter');
+    const province = '浙江省';
+    const defaultCity = '宁波市';
+    const activeCity = String(active.city || defaultCity).trim() || defaultCity;
+    const activeDistrict = String(active.district || '').trim();
+    const activeStreet = String(active.street || '').trim();
+    const district = String(value.district || '').trim();
+    const street = String(value.street || '').trim();
+    const cities = [defaultCity];
+    const districts = mock.addressDistrictOptions ? (mock.addressDistrictOptions(province, defaultCity) || []) : [];
+    const streets = activeDistrict && mock.addressStreetOptions ? (mock.addressStreetOptions(activeDistrict) || []) : [];
+    const label = district && street ? [defaultCity, district, street].join(' / ') : '';
+    const placeholder = String(opts.placeholder || '全部').trim() || '全部';
+    const node = (level, itemValue, selected, hasChildren) => `<button type="button" class="admin-cascader-node${selected ? ' is-active' : ''}${hasChildren ? ' has-children' : ''}" data-action="${pickAction}" data-level="${escape(level)}" data-value="${escape(itemValue)}"><span>${escape(itemValue)}</span>${hasChildren ? '<i aria-hidden="true"></i>' : ''}</button>`;
+    const menu = (items, renderItem) => items.length
+      ? items.map(renderItem).join('')
+      : '<span class="admin-cascader-empty">暂无选项</span>';
+    const cityMenu = menu(cities, (item) => node('city', item, item === activeCity, true));
+    const districtMenu = menu(districts, (item) => node('district', item, item === activeDistrict, true));
+    const streetMenu = menu(streets, (item) => node('street', item, item === activeStreet, false));
+    const panelClass = ['admin-cascader-panel', activeCity ? 'has-city' : '', activeCity && activeDistrict ? 'has-district' : ''].filter(Boolean).join(' ');
+    return `<div class="admin-cascader admin-cascader--address admin-cascader--filter${open ? ' is-open' : ''}"><button type="button" class="admin-cascader-trigger${label ? '' : ' is-placeholder'}" data-action="${toggleAction}" aria-expanded="${open ? 'true' : 'false'}"><span>${escape(label || placeholder)}</span><i class="admin-cascader-caret" aria-hidden="true"></i></button><div class="${panelClass}"><div class="admin-cascader-menu" role="listbox" aria-label="市">${cityMenu}</div>${activeCity ? `<div class="admin-cascader-menu admin-cascader-menu--district" role="listbox" aria-label="区">${districtMenu}</div>` : ''}${activeCity && activeDistrict ? `<div class="admin-cascader-menu admin-cascader-menu--street" role="listbox" aria-label="街道">${streetMenu}</div>` : ''}</div></div>`;
+  };
+
   global.AdminUI = {
     NO_EDIT,
     FORM_MODULES,
@@ -205,6 +258,8 @@
     sortStepper,
     field,
     regionCascader,
+    addressCascader,
+    addressFilterCascader,
     zoomableImage,
     makeImagesZoomable
   };

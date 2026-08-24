@@ -373,7 +373,7 @@
     for (let i = 0; i < 4; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
     return out;
   };
-  const state = { modal: null, toast: '', query: '', filter: '全部', areaFilter: '全部', faqPage: 1, disabledDrones: new Set(), overrides: new Map(), userProfileDraft: {}, companyProfileDraft: {}, draft: {}, regionCascaderOpen: false, regionCascaderActive: {}, sidebarCollapsed: false, helpCollapsed: window.localStorage.getItem(helpStorageKey) === '1', expandedGroups: new Set(['工作台', '无人机后台管理']), tabs: [{ id: 'dashboard', label: '工作台', closable: false }], feedbackTab: 'content', licenseTab: 'types', lightTab: 'issue', dashboardPick: null, areaRange: 'week', areaCustomStart: '2026-07-29', areaCustomEnd: '2026-08-04', sysUserFilter: { userName: '', phone: '', status: '', start: '', end: '' }, sysUserSelected: '', roleFilter: { roleName: '', roleKey: '', status: '', start: '', end: '' }, roleSelected: '', menuFilter: { name: '', status: '' }, menuExpanded: false, dictFilter: { name: '', type: '', status: '' }, configFilter: { name: '', key: '', type: '' }, session: readAdminSession(), loginDraft: { account: 'admin', password: '', captcha: '' }, loginCaptcha: makeLoginCaptcha(), loginError: '', devicePickerQuery: '', devicePickerPage: 1, imagePreview: null };
+  const state = { modal: null, toast: '', query: '', filter: '全部', areaFilter: '全部', streetFilter: '全部', volunteerAddressFilterOpen: false, volunteerAddressFilterActive: {}, faqPage: 1, disabledDrones: new Set(), overrides: new Map(), userProfileDraft: {}, companyProfileDraft: {}, draft: {}, regionCascaderOpen: false, regionCascaderActive: {}, addressCascaderOpen: false, addressCascaderActive: {}, sidebarCollapsed: false, helpCollapsed: window.localStorage.getItem(helpStorageKey) === '1', expandedGroups: new Set(['工作台', '无人机后台管理']), tabs: [{ id: 'dashboard', label: '工作台', closable: false }], feedbackTab: 'content', licenseTab: 'types', lightTab: 'issue', dashboardPick: null, areaRange: 'week', areaCustomStart: '2026-07-29', areaCustomEnd: '2026-08-04', sysUserFilter: { userName: '', phone: '', status: '', start: '', end: '' }, sysUserSelected: '', roleFilter: { roleName: '', roleKey: '', status: '', start: '', end: '' }, roleSelected: '', menuFilter: { name: '', status: '' }, menuExpanded: false, dictFilter: { name: '', type: '', status: '' }, configFilter: { name: '', key: '', type: '' }, session: readAdminSession(), loginDraft: { account: 'admin', password: '', captcha: '' }, loginCaptcha: makeLoginCaptcha(), loginError: '', devicePickerQuery: '', devicePickerPage: 1, imagePreview: null };
   const syncDroneBlacklistState = () => {
     const active = new Set((ledgers.droneBlacklist || []).filter((row) => row.state === '已拉黑').map((row) => row.droneId).filter(Boolean));
     state.disabledDrones = active;
@@ -444,7 +444,7 @@
     if (id === 'login') return;
     if (!state.tabs.some((tab) => tab.id === id)) state.tabs.push({ id, label: routeLabel(id), closable: id !== 'dashboard' });
   };
-  const go = (key) => { state.modal = null; state.imagePreview = null; state.regionCascaderOpen = false; state.regionCascaderActive = {}; const id = normalizeRoute(key); ensureTab(id); location.hash = `#/${id}`; };
+  const go = (key) => { state.modal = null; state.imagePreview = null; state.regionCascaderOpen = false; state.regionCascaderActive = {}; state.addressCascaderOpen = false; state.addressCascaderActive = {}; state.volunteerAddressFilterOpen = false; state.volunteerAddressFilterActive = {}; const id = normalizeRoute(key); ensureTab(id); location.hash = `#/${id}`; };
   const closeTab = (id) => {
     const index = state.tabs.findIndex((tab) => tab.id === id);
     if (index < 0 || !state.tabs[index].closable) return;
@@ -611,8 +611,8 @@
   };
   const shell = (content, key = route()) => {
     const menu = currentMenu(key);
-    const visibleTabs = state.tabs.map((tab) => `<div class="route-tab ${tab.id === key ? 'active' : ''}"><button class="route-tab-select" data-go="${tab.id}"${tab.id === key ? ' aria-current="page"' : ''}>${safe(tab.label)}</button>${tab.closable ? `<button class="tab-close" data-action="close-tab" data-tab="${safe(tab.id)}" aria-label="关闭${safe(tab.label)}">×</button>` : ''}</div>`).join('');
-    return deliveryCopy(`<aside id="admin-sidebar" class="side ${state.sidebarCollapsed ? 'collapsed' : ''}"><div class="admin-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><small>公安管理平台</small></div></div><nav class="side-scroll" aria-label="后台导航">${groups.map(([label, links]) => { const open = links.some(([id]) => id === menu) || state.expandedGroups.has(label); return `<div class="nav-group ${open ? 'open' : ''}"><button class="nav-group-toggle" data-action="toggle-group" data-group="${label}" aria-expanded="${open}">${groupIcon(label)}<span>${label}</span><i>⌄</i></button><div class="nav-children">${links.map(([id, name]) => `<button class="nav-link ${menu === id ? 'active' : ''}" data-go="${id}">${navIcon(id)}<span>${name}</span></button>`).join('')}</div></div>`; }).join('')}</nav><div class="side-footer"><i class="live"></i><span>系统运行正常</span></div></aside><section class="main-shell ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}"><header class="topbar"><div class="topbar-left"><button class="top-icon sidebar-trigger" data-action="toggle-sidebar" aria-controls="admin-sidebar" aria-expanded="${!state.sidebarCollapsed}" aria-label="${state.sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}">${icon('M4 6h16M4 12h16M4 18h16')}</button><div class="crumb">${breadcrumb(menu).replace(' / ',' <i>/</i> ')}</div></div><div class="top-actions"><button class="top-icon" data-action="notify" aria-label="查看提醒">${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M16 16l4 4')}</button><button class="top-icon" data-action="fullscreen" aria-label="切换全屏">${icon('M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5M3 21h5')}</button><div class="top-user"><span class="avatar">${safe((state.session && state.session.avatar) || '鄞')}</span><div class="top-user-copy"><b>${safe((state.session && state.session.name) || '管理员')}</b><small>${safe((state.session && state.session.role) || '系统管理员')}</small></div><button class="logout-btn" type="button" data-action="logout">退出登录</button></div></div></header><nav class="route-tabs" aria-label="已打开页面"><div class="route-tabs-scroll">${visibleTabs}</div><button class="tab-more" data-action="close-others" aria-label="关闭其他页签">${icon('M7 10l5 5 5-5')}</button></nav><div class="workspace ${state.helpCollapsed ? 'help-collapsed' : ''}"><section class="page-body">${content}</section>${pageHelpPanel(key)}</div></section>${state.modal ? modal() : ''}${imagePreviewLayer()}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`);
+    const visibleTabs = state.tabs.map((tab) => `<div class="route-tab ${tab.id === key ? 'active' : ''}"><button class="route-tab-link" type="button" data-go="${tab.id}"${tab.id === key ? ' aria-current="page"' : ''}>${safe(tab.label)}</button>${tab.closable ? `<button type="button" class="tab-close" data-action="close-tab" data-tab="${safe(tab.id)}" aria-label="关闭${safe(tab.label)}">×</button>` : ''}</div>`).join('');
+    return deliveryCopy(`<aside id="admin-sidebar" class="side ${state.sidebarCollapsed ? 'collapsed' : ''}"><div class="admin-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><small>公安管理平台</small></div></div><nav class="side-scroll" aria-label="后台导航">${groups.map(([label, links]) => { const open = links.some(([id]) => id === menu) || state.expandedGroups.has(label); return `<div class="nav-group ${open ? 'open' : ''}"><button class="nav-group-toggle" data-action="toggle-group" data-group="${label}" aria-expanded="${open}">${groupIcon(label)}<span>${label}</span><i>⌄</i></button><div class="nav-children">${links.map(([id, name]) => `<button class="nav-link ${menu === id ? 'active' : ''}" data-go="${id}">${navIcon(id)}<span>${name}</span></button>`).join('')}</div></div>`; }).join('')}</nav><div class="side-footer"><i class="live"></i><span>系统运行正常</span></div></aside><section class="main-shell ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}"><header class="topbar"><div class="topbar-left"><button class="top-icon sidebar-trigger" data-action="toggle-sidebar" aria-controls="admin-sidebar" aria-expanded="${!state.sidebarCollapsed}" aria-label="${state.sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}">${icon('M4 6h16M4 12h16M4 18h16')}</button><div class="crumb">${breadcrumb(menu).replace(' / ',' <i>/</i> ')}</div></div><div class="top-actions"><button class="top-icon" data-action="notify" aria-label="查看提醒">${icon('M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M16 16l4 4')}</button><button class="top-icon" data-action="fullscreen" aria-label="切换全屏">${icon('M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5M3 21h5')}</button><div class="top-user"><span class="avatar">${safe((state.session && state.session.avatar) || '鄞')}</span><div class="top-user-copy"><b>${safe((state.session && state.session.name) || '管理员')}</b><small>${safe((state.session && state.session.role) || '系统管理员')}</small></div><button class="logout-btn" type="button" data-action="logout">退出登录</button></div></div></header><nav class="route-tabs" aria-label="已打开页面"><div class="route-tabs-scroll">${visibleTabs}</div></nav><div class="workspace ${state.helpCollapsed ? 'help-collapsed' : ''}"><section class="page-body">${content}</section>${pageHelpPanel(key)}</div></section>${state.modal ? modal() : ''}${imagePreviewLayer()}${state.toast ? `<div class="toast" role="status">${state.toast}</div>` : ''}`);
   };
   const heading = (name, _description, actions = '') => `<header class="page-heading"><div><p class="eyebrow">LOW-ALTITUDE GOVERNANCE</p><h1>${name}</h1></div><div class="actions">${actions}</div></header>`;
   const enabledLicenseTypes = () => (data.licenseTypes || [])
@@ -704,9 +704,11 @@
     return item.areaShot ? `${text}（已上传区域截图）` : text;
   };
   const volunteerResidence = (item = {}) => {
+    if (data.formatResidenceAddress) return data.formatResidenceAddress(item);
     const picked = data.normalizeResidenceSelection ? data.normalizeResidenceSelection(item) : item;
     const detail = String(item.addressDetail || '').trim();
-    return [picked.province, picked.city, picked.district, detail].filter(Boolean).join('') || item.area || '';
+    const street = String(item.street || '').trim();
+    return [picked.province, picked.city, picked.district, street, detail].filter(Boolean).join('') || item.area || '';
   };
   const flightTimeText = (item) => item.time || (item.startAt && item.endAt ? `${item.startAt.replace('T', ' ')}—${item.endAt.replace('T', ' ').slice(11)}` : '—');
   const droneRegistrationState = (item) => (item.state === '已注销' || data.uomValue(item, 'registrationStatus') === '已注销') ? '已注销' : '有效';
@@ -782,15 +784,29 @@
     const cols = columnsFor(key, rows); const visible = rows.filter((row) => (!state.query || Object.values(row).filter((v) => typeof v !== 'object').join(' ').toLowerCase().includes(state.query.toLowerCase())) && (state.filter === '全部' || statusValue(key, row).includes(state.filter)));
     return visible.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>${cols.map((x) => `<th>${columnLabel(key, x)}</th>`).join('')}<th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr>${cols.map((col) => `<td>${value(col,item,key)}</td>`).join('')}<td><div class="actions"><button class="text-btn" data-action="detail" data-key="${key}" data-id="${safe(item.id)}">详情</button>${(window.AdminUI?.NO_EDIT?.has(key) || ['certificates','drones','drone-blacklist','feedback','accounts','flights','enrollments','audit','alerts','interface','messages'].includes(key)) ? '' : `<button class="text-btn" data-go="form/${key}/${safe(item.id)}">编辑</button>`}${key === 'accounts' ? `<button class="text-btn" data-action="modal" data-modal="permission" data-key="accounts" data-item="${safe(item.id)}">配置权限</button>` : ''}${['laws','news'].includes(key) ? `<button class="text-btn warning" data-action="toggle-content-status" data-id="${safe(item.id)}">${item.status === '已发布' ? '下架' : '发布'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="${key}" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'banners' ? `<button class="text-btn ${item.state === '已启用' ? 'warning' : ''}" data-action="toggle-banner-state" data-id="${safe(item.id)}">${item.state === '已启用' ? '停用' : '启用'}</button><button class="text-btn danger" data-action="request-delete-content" data-key="banners" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'activities' ? `<button class="text-btn" data-go="detail/activities/${safe(item.id)}">查看报名名单</button><button class="text-btn warning" data-action="request-change" data-key="activities" data-id="${safe(item.id)}">下架活动</button><button class="text-btn danger" data-action="request-delete-content" data-key="activities" data-id="${safe(item.id)}">删除</button>` : ''}${key === 'drones' && droneRegistrationState(item) !== '已注销' ? `<button class="text-btn danger" data-action="cancel-drone" data-id="${safe(item.id)}">手动注销</button>` : ''}${key === 'certificates' && item.state !== '已注销' ? `<button class="text-btn danger" data-action="request-change" data-key="certificates" data-id="${safe(item.id)}">手动注销</button>` : ''}${(key === 'users' || key === 'companies' || key === 'blacklist' || key === 'volunteers' || key === 'drone-blacklist') ? `<button class="text-btn danger" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>` : ''}${key === 'drones' && !(state.disabledDrones.has(item.id) || item.manageState === '已禁用') ? `<button class="text-btn warning" data-action="request-change" data-key="drones" data-id="${safe(item.id)}">禁用设备</button>` : ''}${key === 'verification' ? (item.result === '待核查' ? `<button class="text-btn" data-action="request-change" data-key="verification" data-id="${safe(item.id)}">完成核查</button>` : '') : key === 'messages' ? `<button class="text-btn ${item.state === '已启用' ? 'warning' : ''}" data-action="toggle-message-template" data-id="${safe(item.id)}">${item.state === '已启用' ? '停用' : '启用'}</button>` : (['feedback','laws','news','banners','activities','accounts','certificates','drones','drone-blacklist','users','companies','blacklist','volunteers','flights','enrollments','audit','alerts','interface'].includes(key) ? '' : `<button class="text-btn" data-action="request-change" data-key="${key}" data-id="${safe(item.id)}">${operationLabel(key)}</button>`)}</div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的数据</div>';
   };
+  const filterResetBtn = () => `<div class="filter-actions"><button class="secondary-btn" data-action="reset-filter">重置筛选</button></div>`;
+  const filterField = (label, control, grow = false) => `<label class="filter-field${grow ? ' filter-field-grow' : ''}"><span>${safe(label)}</span>${control}</label>`;
+  const filterSearchControl = (placeholder, ariaLabel) => `<input id="search" value="${safe(state.query)}" placeholder="${safe(placeholder)}" aria-label="${safe(ariaLabel)}" />`;
+  const filterSelectControl = (id, options, current, ariaLabel) => `<select id="${id}" aria-label="${safe(ariaLabel)}">${options.map((item) => `<option${current === item ? ' selected' : ''}>${safe(item)}</option>`).join('')}</select>`;
+  const filterBarWrap = (...parts) => `<div class="filter-bar">${parts.join('')}</div>`;
+  const filterStatusLabel = (key) => ({ certificates:'登记状态', faq:'发布状态', flights:'执行状态', enrollments:'确认状态', activities:'活动状态', banners:'展示状态', messages:'启用状态', verification:'核查结果', volunteers:'在册状态', 'rid-modules':'配发状态', 'shoulder-lights':'配发状态' }[key] || '状态');
+  const filterSearchPlaceholder = (key) => ({
+    feedback: '请输入反馈编号、提交人、表单类型或填写内容',
+    'drone-blacklist': '请输入产品名称、登记标志、序列号或拉黑原因',
+    faq: '请输入问题关键词',
+    verification: '搜索核查编号、设备名称、设备序列号或登记标志',
+    messages: '请输入模板编号、名称、业务场景或触发条件',
+    banners: '请输入推送标题、类型或关联内容',
+    enrollments: '请输入活动名称'
+  }[key] || `搜索${meta[key]?.[0] || ''}`);
   const filterBar = (key) => {
-    if (key === 'feedback') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索反馈编号、提交人、表单类型或填写内容" aria-label="搜索反馈提交记录" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    const options = key === 'drone-blacklist' ? null : key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'banners' ? ['全部','生效中','未开始','已过期','已停用'] : key === 'messages' ? ['全部','已启用','已停用'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
-    if (key === 'drone-blacklist') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索产品名称、登记标志、序列号或拉黑原因" aria-label="搜索无人机黑名单" /><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    if (key === 'faq') return `<div class="filter-bar faq-filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索问题关键词" aria-label="搜索常见问题" /><select id="state-filter" aria-label="发布状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    if (key === 'verification') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索核查编号、设备名称、设备序列号或登记标志" aria-label="搜索设备核查" /><select id="state-filter" aria-label="核查结果筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    if (key === 'messages') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索模板编号、名称、业务场景或触发条件" aria-label="搜索消息模板" /><select id="state-filter" aria-label="启用状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    if (key === 'banners') return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索推送标题、类型或关联内容" aria-label="搜索 Banner 推送" /><select id="state-filter" aria-label="展示状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索${meta[key][0]}" aria-label="搜索" /><select id="state-filter" aria-label="状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const reset = filterResetBtn();
+    const searchPlaceholder = filterSearchPlaceholder(key);
+    const searchAria = key === 'feedback' ? '搜索反馈提交记录' : key === 'drone-blacklist' ? '搜索无人机黑名单' : key === 'faq' ? '搜索常见问题' : key === 'verification' ? '搜索设备核查' : key === 'messages' ? '搜索消息模板' : key === 'banners' ? '搜索 Banner 推送' : key === 'enrollments' ? '搜索活动' : '搜索';
+    if (key === 'feedback' || key === 'drone-blacklist') return filterBarWrap(filterField('关键词', filterSearchControl(searchPlaceholder, searchAria), true), reset);
+    const options = key === 'certificates' ? ['全部','有效','已注销'] : key === 'faq' ? ['全部','已发布','已下架'] : key === 'flights' ? ['全部','未执行','已确认执行'] : key === 'enrollments' ? ['全部','待确认','已确认'] : key === 'activities' ? ['全部','报名中','进行中','已结束','已下架'] : key === 'banners' ? ['全部','生效中','未开始','已过期','已停用'] : key === 'messages' ? ['全部','已启用','已停用'] : key === 'verification' ? ['全部','待核查','通过','不通过'] : ['全部','正常','待处理','已记录'];
+    const searchLabel = key === 'enrollments' ? '活动名称' : '关键词';
+    return filterBarWrap(filterField(searchLabel, filterSearchControl(searchPlaceholder, searchAria), true), filterField(filterStatusLabel(key), filterSelectControl('state-filter', options, state.filter, filterStatusLabel(key))), reset);
   };
   const faqRows = () => rowsFor('faq')
     .filter((row) => (!state.query || `${row.question} ${row.answer}`.toLowerCase().includes(state.query.toLowerCase())) && (state.filter === '全部' || row.status === state.filter))
@@ -849,7 +865,7 @@
     }).filter((row) => !state.query || `${row.title}${row.id}`.toLowerCase().includes(state.query.toLowerCase()))
       .filter((row) => state.filter === '全部' || (state.filter === '待确认' ? row.pending > 0 : state.filter === '已确认' ? row.listState === '已确认' : true));
     const body = rows.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>活动名称</th><th>活动状态</th><th>已报名/名额</th><th>待确认</th><th>名单确认状态</th><th>操作</th></tr></thead><tbody>${rows.map((item) => `<tr><td><b>${safe(item.title)}</b><small class="faq-record-id">${safe(item.id)}</small></td><td>${status(item.status)}</td><td>${safe(item.enrolledText)}</td><td>${item.pending}</td><td>${status(item.listState)}</td><td><div class="actions"><button class="text-btn" data-go="detail/activities/${safe(item.id)}">进入名单确认</button><button class="text-btn" data-action="export" data-label="报名名单">导出</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">暂无符合条件的活动报名</div>';
-    return shell(`${heading('报名确认','按活动汇总待确认报名；进入活动详情核对后对本场名单执行总确认。','<button class="primary-btn" data-action="export" data-label="报名名单">导出报名</button>')}<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索活动名称" aria-label="搜索活动" /><select id="state-filter" aria-label="名单确认状态筛选">${['全部','待确认','已确认'].map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>${body}`, 'enrollments');
+    return shell(`${heading('报名确认','按活动汇总待确认报名；进入活动详情核对后对本场名单执行总确认。','<button class="primary-btn" data-action="export" data-label="报名名单">导出报名</button>')}${filterBarWrap(filterField('活动名称', filterSearchControl('请输入活动名称', '搜索活动'), true), filterField('确认状态', filterSelectControl('state-filter', ['全部','待确认','已确认'], state.filter, '确认状态')), filterResetBtn())}${body}`, 'enrollments');
   };
   const formModules = ['activities','laws','news','banners','guides','faq','volunteers','blacklist','verification'];
   const normal = (key) => {
@@ -874,7 +890,7 @@
     return shell(`${heading(name,desc,headerButton)}${filterBar(key)}${table(key)}`,key);
   };
   const metric = (name, number, note) => `<article class="metric-card"><span>${name}</span><strong>${number}</strong><small>${note}</small></article>`;
-  const dashboardMetric = (name, number, note, go) => `<button type="button" class="metric-card is-interactive" data-go="${go}"><span>${name}</span><strong>${number}</strong><small>${note}</small></button>`;
+  const dashboardMetric = (name, number, note, go, tone = 'blue') => `<button type="button" class="metric-card metric-card--${tone} is-interactive" data-go="${go}"><span class="metric-card-label">${name}</span><strong>${number}</strong><small>${note}</small></button>`;
   const dashboardAnchorDate = '2026-08-10';
   const areaRangeOptions = [
     { id: 'week', label: '近一周' },
@@ -957,36 +973,39 @@
       { name: '未执行架次', value: String(pending), tone: 'pending', caption: total ? `占报备 ${Math.round((pending / total) * 100)}%` : '暂无报备' }
     ];
   };
+  const licenseCardTones = ['blue', 'teal', 'amber', 'violet', 'rose', 'slate'];
   const licenseTypeStats = () => enabledLicenseTypes().map((type) => {
     const value = Number(type.uploaded) >= 0 ? Number(type.uploaded) : licensesOfType(type.id).length;
     const pct = dashboardPersonalUsers ? Math.round((value / dashboardPersonalUsers) * 100) : 0;
-    return {
-      id: type.id,
-      name: type.name,
-      value: String(value),
-      pct,
-      caption: `占个人用户 ${pct}% · ${licensesOfType(type.id).length} 条台账`
-    };
+    return { id: type.id, name: type.name, value: String(value), pct };
   });
   const licenseStatsPanel = () => {
     const active = state.dashboardPick?.kind === 'license' ? state.dashboardPick.id : '';
     const details = licenseTypeStats();
     if (!details.length) return '<div class="empty">暂无启用的执照分类</div>';
-    const cards = details.map((item) => `<button type="button" class="license-card is-interactive ${active === item.id ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="license" data-id="${safe(item.id)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><div><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><em>${safe(item.caption)}</em></div><div class="license-ring" style="--p:${item.pct}" aria-hidden="true"><b>${item.pct}%</b></div></button>`).join('');
-    return `<div class="license-grid">${cards}</div>`;
+    const cards = details.map((item, index) => {
+      const tone = licenseCardTones[index % licenseCardTones.length];
+      return `<button type="button" class="license-card license-card--${tone} is-interactive ${active === item.id ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="license" data-id="${safe(item.id)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><div class="license-card-body"><span class="license-card-title">${safe(item.name)}</span><strong>${safe(item.value)}</strong><em>占个人用户 ${item.pct}%</em></div><div class="license-ring" style="--p:${item.pct}" aria-hidden="true"><b>${item.pct}%</b></div></button>`;
+    }).join('');
+    return `<div class="license-grid" data-count="${details.length}">${cards}</div>`;
   };
   const areaRangeFilter = () => {
     const chips = areaRangeOptions.map((item) => `<button type="button" class="range-chip ${state.areaRange === item.id ? 'is-active' : ''}" data-action="dashboard-area-range" data-range="${item.id}">${item.label}</button>`).join('');
     const custom = state.areaRange === 'custom'
-      ? `<div class="range-custom"><label>开始日期<input type="date" data-area-date="start" value="${safe(state.areaCustomStart)}" aria-label="自选开始日期" /></label><label>结束日期<input type="date" data-area-date="end" value="${safe(state.areaCustomEnd)}" aria-label="自选结束日期" /></label></div>`
+      ? `<div class="range-custom"><input type="date" data-area-date="start" value="${safe(state.areaCustomStart)}" aria-label="自选开始日期" /><span class="range-sep">至</span><input type="date" data-area-date="end" value="${safe(state.areaCustomEnd)}" aria-label="自选结束日期" /></div>`
       : '';
-    return `<div class="range-filter range-filter--board" aria-label="飞行报备统计时间段筛选"><div class="range-chips">${chips}</div>${custom}</div>`;
+    return `<div class="range-filter range-filter--board${state.areaRange === 'custom' ? ' is-custom' : ''}" aria-label="飞行报备统计时间段筛选"><div class="range-chips">${chips}</div>${custom}</div>`;
   };
-  const dashboardFlightToolbar = () => `<div class="dashboard-flight-toolbar"><p class="range-hint">当前统计时间段：<b>${safe(areaRangeLabel())}</b></p><div data-dashboard-area-filter>${areaRangeFilter()}</div></div>`;
+  const dashboardFlightToolbar = () => `<div class="dashboard-flight-toolbar${state.areaRange === 'custom' ? ' is-custom' : ''}"><p class="range-hint">当前统计时间段：<b>${safe(areaRangeLabel())}</b></p><div data-dashboard-area-filter>${areaRangeFilter()}</div></div>`;
+  const distRowTones = ['blue', 'teal', 'amber', 'violet', 'rose', 'slate'];
+  const sortieTones = ['blue', 'teal', 'slate'];
   const distListPanel = (rows, kind, emptyText) => {
     const active = state.dashboardPick?.kind === kind ? state.dashboardPick.id : '';
-    if (!rows.length) return `<div class="empty">${safe(emptyText)}</div>`;
-    return `<div class="dist-list">${rows.map((item) => `<button type="button" class="dist-row is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="${kind}" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div><b>${item.count}</b></button>`).join('')}</div>`;
+    if (!rows.length) return `<div class="empty dist-empty">${safe(emptyText)}</div>`;
+    return `<div class="dist-list" data-count="${rows.length}">${rows.map((item, index) => {
+      const tone = distRowTones[index % distRowTones.length];
+      return `<button type="button" class="dist-row dist-row--${tone} is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="${kind}" data-id="${safe(item.name)}" data-value="${item.count}" data-label="${safe(item.name)}"><span class="dist-rank">${index + 1}</span><div class="dist-main"><span class="dist-label">${safe(item.name)}</span><div class="dist-bar"><i style="width:${item.pct}%"></i></div></div><b class="dist-value">${item.count}</b></button>`;
+    }).join('')}</div>`;
   };
   const areaDistributionPanel = () => distListPanel(takeoffDistributionRows(), 'area', '所选时间段暂无起飞地报备数据');
   const activityTypeStatsPanel = () => distListPanel(activityTypeDistributionRows(), 'activity-type', '所选时间段暂无飞行活动类型数据');
@@ -994,15 +1013,16 @@
     const active = state.dashboardPick?.kind === 'sortie' ? state.dashboardPick.id : '';
     const details = flightSortieStats();
     const total = Number(details[0]?.value || 0) || 0;
-    const cards = details.map((item) => {
+    const cards = details.map((item, index) => {
       const value = Number(item.value || 0) || 0;
       const pct = item.name === '报备架次' ? (total ? 100 : 0) : (total ? Math.round((value / total) * 100) : 0);
-      return `<button type="button" class="sortie-card is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="sortie" data-id="${safe(item.name)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><i class="sortie-bar" aria-hidden="true"><b style="width:${pct}%"></b></i><em>${safe(item.caption)}</em></button>`;
+      const tone = sortieTones[index] || 'blue';
+      return `<button type="button" class="sortie-card sortie-card--${tone} is-interactive ${active === item.name ? 'is-active' : ''}" data-action="dashboard-pick" data-kind="sortie" data-id="${safe(item.name)}" data-value="${safe(item.value)}" data-label="${safe(item.name)}"><span>${safe(item.name)}</span><strong>${safe(item.value)}</strong><i class="sortie-bar" aria-hidden="true"><b style="width:${pct}%"></b></i><em>${safe(item.caption)}</em></button>`;
     }).join('');
     return `<div class="sortie-grid">${cards}</div>`;
   };
   const dashboardPanel = (title, bodyAttr, bodyHtml, extraClass = '') => `<article class="panel dashboard-panel ${extraClass}"><header class="panel-head"><div><p class="label">数据统计</p><h2>${title}</h2></div></header><div class="panel-body" ${bodyAttr}>${bodyHtml}</div></article>`;
-  const dashboard = () => shell(`<div class="dashboard-page">${heading('鄞州低空治理工作台')}<section class="metric-grid">${dashboardMetric('个人用户','2,486','较上月 +8.6%','users')}${dashboardMetric('企业用户','186','较上月 +3.2%','companies')}${dashboardMetric('在册无人机','3,927','本周新增 28 架','drones')}${dashboardMetric('飞行计划','128','今日待执行 16 项','flights')}</section><section class="dashboard-flight"><div data-dashboard-board-toolbar class="dashboard-flight-toolbar-host">${dashboardFlightToolbar()}</div><div class="dashboard-flight-layout">${dashboardPanel('起飞地分布', 'data-dashboard-area-body', areaDistributionPanel(), 'dashboard-panel--takeoff')}${dashboardPanel('飞行活动类型统计', 'data-dashboard-activity-type-body', activityTypeStatsPanel(), 'dashboard-panel--activity')}${dashboardPanel('飞行架次统计', 'data-dashboard-sortie-body', flightSortieStatsPanel(), 'dashboard-panel--sortie')}</div></section><section class="dashboard-license">${dashboardPanel('执照数据', 'data-dashboard-license-body', licenseStatsPanel(), 'dashboard-panel--license')}</section></div>`,'dashboard');
+  const dashboard = () => shell(`<div class="dashboard-page">${heading('鄞州低空治理工作台')}<section class="metric-grid">${dashboardMetric('个人用户','2,486','较上月 +8.6%','users','blue')}${dashboardMetric('企业用户','186','较上月 +3.2%','companies','teal')}${dashboardMetric('在册无人机','3,927','本周新增 28 架','drones','amber')}${dashboardMetric('飞行计划','128','今日待执行 16 项','flights','violet')}</section><section class="dashboard-flight"><div data-dashboard-board-toolbar class="dashboard-flight-toolbar-host">${dashboardFlightToolbar()}</div><div class="dashboard-flight-layout">${dashboardPanel('起飞地分布', 'data-dashboard-area-body', areaDistributionPanel(), 'dashboard-panel--takeoff')}${dashboardPanel('飞行活动类型统计', 'data-dashboard-activity-type-body', activityTypeStatsPanel(), 'dashboard-panel--activity')}${dashboardPanel('飞行架次统计', 'data-dashboard-sortie-body', flightSortieStatsPanel(), 'dashboard-panel--sortie')}</div></section><section class="dashboard-license">${dashboardPanel('执照数据', 'data-dashboard-license-body', licenseStatsPanel(), 'dashboard-panel--license')}</section></div>`,'dashboard');
   const patchDashboardArea = () => {
     const page = app.querySelector('.dashboard-page');
     if (!page) { render(); return false; }
@@ -1369,10 +1389,7 @@
     if (!visible.length) return '<div class="empty">暂无符合条件的配置</div>';
     return `<div class="table-wrap"><table class="data-table"><thead><tr><th>编号</th><th>名称</th><th>排序</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${visible.map((item) => `<tr><td>${safe(item.id)}</td><td>${safe(item.name)}</td><td>${safe(String(item.sort || '—'))}</td><td>${status(item.state || '启用')}</td><td>${safe(item.updated || '—')}</td><td><div class="actions"><button class="text-btn" data-action="modal" data-modal="edit-config" data-key="${key}" data-item="${safe(item.id)}">编辑</button><button class="text-btn ${item.state === '启用' ? 'warning' : ''}" data-action="toggle-config" data-key="${key}" data-id="${safe(item.id)}">${item.state === '启用' ? '停用' : '启用'}</button><button class="text-btn danger" data-action="request-delete-config" data-key="${key}" data-id="${safe(item.id)}">删除</button></div></td></tr>`).join('')}</tbody></table></div>`;
   };
-  const configFilterBar = (placeholder) => {
-    const options = ['全部', '启用', '停用'];
-    return `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="${safe(placeholder)}" aria-label="搜索配置" /><select id="state-filter" aria-label="状态筛选">${options.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-  };
+  const configFilterBar = (placeholder) => filterBarWrap(filterField('关键词', filterSearchControl(placeholder.startsWith('请输入') ? placeholder : `请输入${placeholder.replace(/^搜索/, '')}`, '搜索配置'), true), filterField('状态', filterSelectControl('state-filter', ['全部', '启用', '停用'], state.filter, '状态')), filterResetBtn());
   const streetsPage = () => { location.hash = '#/addresses'; return ''; };
   const districtsPage = () => { location.hash = '#/addresses'; return ''; };
   const addressDistrictById = (id) => (data.addressConfigs || []).find((item) => item.id === id);
@@ -1406,7 +1423,7 @@
   const licenseTypesPage = () => {
     const tabs = `<div class="page-tabs">${[['types', '执照分类'], ['records', '分类数据']].map(([tab, text]) => `<button class="${state.licenseTab === tab ? 'active' : ''}" data-action="license-tab" data-value="${tab}">${text}</button>`).join('')}</div>`;
     const typeNames = ['全部', ...configRowsSorted(data.licenseTypes || []).map((item) => item.name)];
-    const recordFilter = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索用户姓名、分类或编号" aria-label="搜索执照数据" /><select id="state-filter" aria-label="执照分类筛选">${typeNames.map((item) => `<option${state.filter === item ? ' selected' : ''}>${safe(item)}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const recordFilter = filterBarWrap(filterField('关键词', filterSearchControl('请输入用户姓名、分类或编号', '搜索执照数据'), true), filterField('执照分类', filterSelectControl('state-filter', typeNames, state.filter, '执照分类')), filterResetBtn());
     const q = state.query.trim().toLowerCase();
     const records = (data.licenses || []).filter((item) => {
       const typeName = item.typeName || licenseTypeById(item.typeId)?.name || '';
@@ -1449,16 +1466,30 @@
     return shell(`${heading('意见反馈','',headerActions)}${tabs}${state.feedbackTab === 'forms' ? formsTable : `${filterBar('feedback')}${feedbackContentTable()}`}`,'feedback');
   };
   const volunteersPage = () => {
-    const districts = (data.addressDistrictOptions && data.addressDistrictOptions('浙江省', '宁波市')) || data.ningboDistricts || [];
-    const areaOptions = ['全部', ...districts];
     const stateOptions = ['全部', '在册', '已移除'];
+    const addressFilterValue = {
+      district: state.areaFilter === '全部' ? '' : state.areaFilter,
+      street: state.streetFilter === '全部' ? '' : state.streetFilter
+    };
+    const addressFilterControl = AdminUI.addressFilterCascader
+      ? AdminUI.addressFilterCascader(addressFilterValue, data, {
+        open: state.volunteerAddressFilterOpen,
+        active: state.volunteerAddressFilterActive,
+        toggleAction: 'toggle-volunteer-address-filter',
+        pickAction: 'pick-volunteer-address-filter',
+        placeholder: '全部'
+      })
+      : filterSelectControl('area-filter', ['全部'], state.areaFilter, '常住地址');
+    const volunteerAddress = (row) => (data.normalizePersonalSupplement ? data.normalizePersonalSupplement(row) : row);
     const rows = ledgers.volunteers.filter((row) => {
       const q = state.query.trim().toLowerCase();
       const residence = volunteerResidence(row) || row.area || '';
+      const address = volunteerAddress(row);
       const hitQuery = !q || `${row.name}${row.phone}${row.volunteerType}${residence}`.toLowerCase().includes(q);
-      const hitArea = state.areaFilter === '全部' || row.district === state.areaFilter || String(residence).includes(state.areaFilter);
+      const hitArea = state.areaFilter === '全部' || address.district === state.areaFilter;
+      const hitStreet = state.streetFilter === '全部' || address.street === state.streetFilter;
       const hitState = state.filter === '全部' || row.state === state.filter;
-      return hitQuery && hitArea && hitState;
+      return hitQuery && hitArea && hitStreet && hitState;
     });
     const body = rows.length
       ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>姓名</th><th>手机号码</th><th>志愿者类型</th><th>常住地址</th><th>在册状态</th><th>操作</th></tr></thead><tbody>${rows.map((item) => {
@@ -1466,7 +1497,7 @@
         return `<tr><td>${safe(item.name)}</td><td>${safe(item.phone)}</td><td>${safe(item.volunteerType || '—')}</td><td>${safe(residence)}</td><td>${status(item.state || '在册')}</td><td><div class="actions"><button class="text-btn" data-action="detail" data-key="volunteers" data-id="${safe(item.id)}">详情</button><button class="text-btn" data-go="form/volunteers/${safe(item.id)}">编辑</button>${item.state === '在册' ? `<button class="text-btn danger" data-action="request-change" data-key="volunteers" data-id="${safe(item.id)}">移除</button>` : ''}</div></td></tr>`;
       }).join('')}</tbody></table></div>`
       : '<div class="empty">暂无符合条件的志愿者</div>';
-    const filters = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索姓名、手机号" aria-label="搜索志愿者" /><select id="area-filter" aria-label="常住地址筛选">${areaOptions.map((item) => `<option${state.areaFilter === item ? ' selected' : ''}>${safe(item)}</option>`).join('')}</select><select id="state-filter" aria-label="在册状态筛选">${stateOptions.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const filters = filterBarWrap(filterField('关键词', filterSearchControl('请输入姓名、手机号', '搜索志愿者'), true), filterField('常住地址', addressFilterControl), filterField('在册状态', filterSelectControl('state-filter', stateOptions, state.filter, '在册状态')), filterResetBtn());
     return shell(`${heading('志愿者名册','',`<button class="primary-btn" data-go="form/volunteers/new">添加志愿者</button>`)}${filters}${body}`,'volunteers');
   };
   const ridModulesPage = () => {
@@ -1480,7 +1511,7 @@
     const body = rows.length
       ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>模块编号</th><th>设备序列号</th><th>设备型号</th><th>配发状态</th><th>关联志愿者</th><th>所属区域</th><th>更新时间</th><th>操作</th></tr></thead><tbody>${rows.map((item) => `<tr><td>${safe(item.id)}</td><td>${safe(item.sn || '—')}</td><td>${safe(item.model || '—')}</td><td>${status(item.state)}</td><td>${safe(item.volunteerName || '—')}</td><td>${safe(item.area || '—')}</td><td>${safe(item.updatedAt || '—')}</td><td><div class="actions">${item.state === '在库' ? `<button class="text-btn" data-action="modal" data-modal="issue-rid" data-item="${safe(item.id)}">配发</button>` : ''}${item.state === '已配发' ? `<button class="text-btn" data-action="request-change" data-key="rid-modules" data-id="${safe(item.id)}">回收</button>${item.volunteerId ? `<button class="text-btn" data-action="detail" data-key="volunteers" data-id="${safe(item.volunteerId)}">查看志愿者</button>` : ''}` : ''}</div></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty">暂无符合条件的 RID 模块</div>';
-    const filters = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索编号、序列号、志愿者或区域" aria-label="搜索 RID 模块" /><select id="state-filter" aria-label="配发状态筛选">${stateOptions.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const filters = filterBarWrap(filterField('关键词', filterSearchControl('请输入编号、序列号、志愿者或区域', '搜索 RID 模块'), true), filterField('配发状态', filterSelectControl('state-filter', stateOptions, state.filter, '配发状态')), filterResetBtn());
     return shell(`${heading('RID模块','',`<button class="primary-btn" data-action="modal" data-modal="create-rid">新增RID</button>`)}${filters}${body}`,'rid-modules');
   };
   const shoulderLightsPage = () => {
@@ -1503,8 +1534,8 @@
     const headerActions = state.lightTab === 'issue'
       ? `<button class="primary-btn" data-action="modal" data-modal="create-light">新增肩带</button>`
       : `<button class="primary-btn" data-action="modal" data-modal="maintain-light">登记维护</button>`;
-    const issueFilter = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索肩灯编号、领用人或单位" aria-label="搜索肩灯" /><select id="state-filter" aria-label="配发状态筛选">${issueStateOptions.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
-    const maintainFilter = `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="搜索设备编号或说明" aria-label="搜索维护记录" /><select id="state-filter" aria-label="维护状态筛选">${maintainStateOptions.map((item) => `<option${state.filter === item ? ' selected' : ''}>${item}</option>`).join('')}</select><button class="secondary-btn grow" data-action="reset-filter">重置筛选</button></div>`;
+    const issueFilter = filterBarWrap(filterField('关键词', filterSearchControl('请输入肩灯编号、领用人或单位', '搜索肩灯'), true), filterField('配发状态', filterSelectControl('state-filter', issueStateOptions, state.filter, '配发状态')), filterResetBtn());
+    const maintainFilter = filterBarWrap(filterField('关键词', filterSearchControl('请输入设备编号或说明', '搜索维护记录'), true), filterField('维护状态', filterSelectControl('state-filter', maintainStateOptions, state.filter, '维护状态')), filterResetBtn());
     return shell(`${heading('肩灯配发', '', headerActions)}${tabs}${state.lightTab === 'issue' ? `${issueFilter}${issueTable}` : `${maintainFilter}${maintainTable}`}`,'shoulder-lights');
   };
   const ensureFormDraft = (key, id) => {
@@ -1515,6 +1546,8 @@
     state.draft = AdminForms.loadDraft(key, routeId === 'new' ? null : routeId, { ...data, volunteers: ledgers.volunteers, blacklist: ledgers.blacklist, verification: ledgers.verification }, state);
     state.regionCascaderOpen = false;
     state.regionCascaderActive = {};
+    state.addressCascaderOpen = false;
+    state.addressCascaderActive = {};
     if (key === 'users') state.userProfileDraft = { ...state.draft };
     if (key === 'companies') state.companyProfileDraft = { ...state.draft };
   };
@@ -1548,7 +1581,7 @@
     ensureFormDraft(key, id);
     const enrollLocked = key === 'activities' && id && id !== 'new' && data.enrollments.some((entry) => entry.activityId === id);
     const canSaveEnrollFields = key === 'activities' && id && id !== 'new' && !enrollLocked;
-    return AdminForms.render({ key, id, draft: state.draft, shell, safe, enrollLocked, canSaveEnrollFields, users: data.users || [], volunteers: ledgers.volunteers || [], deviceQuery: state.devicePickerQuery || '', userQuery: state.devicePickerQuery || '', pickerPage: state.devicePickerPage || 1, regionCascaderOpen: state.regionCascaderOpen, regionCascaderActive: state.regionCascaderActive });
+    return AdminForms.render({ key, id, draft: state.draft, shell, safe, enrollLocked, canSaveEnrollFields, users: data.users || [], volunteers: ledgers.volunteers || [], deviceQuery: state.devicePickerQuery || '', userQuery: state.devicePickerQuery || '', pickerPage: state.devicePickerPage || 1, regionCascaderOpen: state.regionCascaderOpen, regionCascaderActive: state.regionCascaderActive, addressCascaderOpen: state.addressCascaderOpen, addressCascaderActive: state.addressCascaderActive });
   };
     const configRows = (fields) => AdminUI.configRows(fields);
   const modalShell = (title, description, body, submitAction, submitText, wide = false) => `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal${wide ? ' modal-wide' : ''}"><h2 id="modal-title" tabindex="-1">${title}</h2>${description ? `<p>${description}</p>` : ''}${body}<div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="${submitAction}">${submitText}</button></div></section></div>`;
@@ -1778,8 +1811,10 @@ if (type === 'activity-confirm') {
   const normalizeEnrollFields = (fields) => (fields || []).map((row) => (window.AdminUI?.normalizeEnrollField ? AdminUI.normalizeEnrollField(row) : [...row])).filter((row) => row[0] && String(row[0]).trim());
   const activityHasEnrollments = (activityId) => Boolean(activityId && activityId !== 'new' && data.enrollments.some((entry) => entry.activityId === activityId));
   document.addEventListener('click', (event) => {
-    if (state.regionCascaderOpen && !event.target.closest('.admin-cascader')) {
+    if ((state.regionCascaderOpen || state.addressCascaderOpen || state.volunteerAddressFilterOpen) && !event.target.closest('.admin-cascader')) {
       state.regionCascaderOpen = false;
+      state.addressCascaderOpen = false;
+      state.volunteerAddressFilterOpen = false;
       if (!event.target.closest('[data-go],[data-action]')) {
         render();
         return;
@@ -1832,6 +1867,77 @@ if (type === 'activity-confirm') {
         return;
       }
       state.regionCascaderActive = active;
+      render();
+      return;
+    }
+    if (action === 'toggle-address-cascader') {
+      state.addressCascaderOpen = !state.addressCascaderOpen;
+      if (state.addressCascaderOpen) {
+        state.addressCascaderActive = {
+          city: state.draft.city || '宁波市',
+          district: state.draft.district || '',
+          street: state.draft.street || ''
+        };
+      }
+      render();
+      return;
+    }
+    if (action === 'pick-address-cascader') {
+      const level = el.dataset.level;
+      const value = el.dataset.value || '';
+      const active = { ...(state.addressCascaderActive || {}) };
+      if (level === 'city') {
+        active.city = value;
+        active.district = '';
+        active.street = '';
+      } else if (level === 'district') {
+        active.district = value;
+        active.street = '';
+      } else if (level === 'street') {
+        state.draft.province = '浙江省';
+        state.draft.city = active.city || '宁波市';
+        state.draft.district = active.district || '';
+        state.draft.street = value;
+        state.addressCascaderActive = { city: state.draft.city, district: state.draft.district, street: state.draft.street };
+        state.addressCascaderOpen = false;
+        render();
+        return;
+      }
+      state.addressCascaderActive = active;
+      render();
+      return;
+    }
+    if (action === 'toggle-volunteer-address-filter') {
+      state.volunteerAddressFilterOpen = !state.volunteerAddressFilterOpen;
+      if (state.volunteerAddressFilterOpen) {
+        state.volunteerAddressFilterActive = {
+          city: '宁波市',
+          district: state.areaFilter === '全部' ? '' : state.areaFilter,
+          street: state.streetFilter === '全部' ? '' : state.streetFilter
+        };
+      }
+      render();
+      return;
+    }
+    if (action === 'pick-volunteer-address-filter') {
+      const level = el.dataset.level;
+      const value = el.dataset.value || '';
+      const active = { ...(state.volunteerAddressFilterActive || {}), city: '宁波市' };
+      if (level === 'city') {
+        active.district = '';
+        active.street = '';
+      } else if (level === 'district') {
+        active.district = value;
+        active.street = '';
+      } else if (level === 'street') {
+        state.areaFilter = active.district || '';
+        state.streetFilter = value;
+        state.volunteerAddressFilterActive = { city: '宁波市', district: state.areaFilter, street: state.streetFilter };
+        state.volunteerAddressFilterOpen = false;
+        render();
+        return;
+      }
+      state.volunteerAddressFilterActive = active;
       render();
       return;
     }
@@ -2401,11 +2507,13 @@ if (type === 'activity-confirm') {
       }
       if (key === 'volunteers') {
         const addressDetail = String(d.addressDetail || '').trim();
-        const address = data.normalizeResidenceSelection
-          ? { ...data.normalizeResidenceSelection({ province: d.province || '', city: d.city || '', district: d.district || '' }), addressDetail }
-          : { province: d.province || '浙江省', city: d.city || '宁波市', district: d.district || '', addressDetail };
-        const area = [address.province, address.city, address.district, address.addressDetail].filter(Boolean).join('');
-        if (!address.province || !address.city || !address.district) { notify('请选择常住地址的省市区'); return; }
+        const address = data.normalizeAddressSelection
+          ? data.normalizeAddressSelection({ province: d.province || '浙江省', city: d.city || '宁波市', district: d.district || '', street: d.street || '' })
+          : { province: d.province || '浙江省', city: d.city || '宁波市', district: d.district || '', street: d.street || '', addressDetail };
+        const area = data.formatResidenceAddress
+          ? data.formatResidenceAddress({ ...address, addressDetail })
+          : [address.province, address.city, address.district, address.street, addressDetail].filter(Boolean).join('');
+        if (!address.district || !address.street) { notify('请选择常住地址的区与街道'); return; }
         if (!addressDetail) { notify('请填写详细地址'); return; }
         if (isNew) {
           const entryMode = d.entryMode === 'manual' ? 'manual' : 'user';
@@ -2420,8 +2528,8 @@ if (type === 'activity-confirm') {
             province: address.province,
             city: address.city,
             district: address.district,
-            street: '',
-            addressDetail: address.addressDetail || '',
+            street: address.street,
+            addressDetail,
             area,
             confirmedAt: d.confirmedAt || data.now,
             state: '在册',
@@ -2436,8 +2544,8 @@ if (type === 'activity-confirm') {
             province: address.province,
             city: address.city,
             district: address.district,
-            street: '',
-            addressDetail: address.addressDetail || '',
+            street: address.street,
+            addressDetail,
             area,
             confirmedAt: d.confirmedAt || item.confirmedAt,
             userId: item.userId || d.userId || ''
@@ -2713,8 +2821,11 @@ if (type === 'activity-confirm') {
       state.draft.province = supplement.province || '浙江省';
       state.draft.city = supplement.city || '宁波市';
       state.draft.district = supplement.district || '';
+      state.draft.street = supplement.street || '';
       state.draft.addressDetail = supplement.addressDetail || '';
-      state.draft.area = [supplement.province, supplement.city, supplement.district, supplement.addressDetail].filter(Boolean).join('');
+      state.draft.area = data.formatResidenceAddress
+        ? data.formatResidenceAddress(supplement)
+        : [supplement.province, supplement.city, supplement.district, supplement.street, supplement.addressDetail].filter(Boolean).join('');
       state.devicePickerQuery = '';
       state.devicePickerPage = 1;
       render();
@@ -2728,6 +2839,7 @@ if (type === 'activity-confirm') {
       state.draft.province = '';
       state.draft.city = '';
       state.draft.district = '';
+      state.draft.street = '';
       state.draft.addressDetail = '';
       state.draft.area = '';
       state.devicePickerQuery = '';
@@ -3264,7 +3376,7 @@ if (type === 'activity-confirm') {
     if (action === 'history') notify('已展示关联记录与历史记录');
     if (action === 'export') notify(`${el.dataset.label || '统计报表'}已导出`);
     if (action === 'faq-page') { state.faqPage = Math.max(1, Number(el.dataset.page) || 1); render(); }
-    if (action === 'reset-filter') { state.query=''; state.filter='全部'; state.areaFilter='全部'; state.faqPage = 1; render(); }
+    if (action === 'reset-filter') { state.query=''; state.filter='全部'; state.areaFilter='全部'; state.streetFilter='全部'; state.volunteerAddressFilterOpen = false; state.volunteerAddressFilterActive = {}; state.faqPage = 1; render(); }
   });
   document.addEventListener('input', (event) => {
     if (event.target.dataset?.userProfileField !== undefined) { state.userProfileDraft[event.target.dataset.userProfileField] = event.target.value; return; }
@@ -3374,7 +3486,6 @@ if (type === 'activity-confirm') {
       return;
     }
     if (event.target.id === 'state-filter') { state.filter = event.target.value; state.faqPage = 1; render(); }
-    if (event.target.id === 'area-filter') { state.areaFilter = event.target.value; render(); }
   });
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !state.imagePreview) return;
@@ -3386,6 +3497,9 @@ if (type === 'activity-confirm') {
     state.query = '';
     state.filter = '全部';
     state.areaFilter = '全部';
+    state.streetFilter = '全部';
+    state.volunteerAddressFilterOpen = false;
+    state.volunteerAddressFilterActive = {};
     const r = normalizeRoute(route());
     if (route() !== r) location.hash = `#/${r}`;
     if (!r.startsWith('form/')) { state.formKey = ''; state.formId = ''; state.devicePickerQuery = ''; state.devicePickerPage = 1; }
