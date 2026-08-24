@@ -9,11 +9,25 @@
     updated: item.updated || data.now
   })).filter((item) => item.name);
   const syncFlightConfigLists = () => {
-    data.streetConfigs = normalizeConfigRows(data.streetConfigs || [], 'ST');
+    if (typeof data.syncAddressConfigs === 'function') {
+      data.addressConfigs = data.syncAddressConfigs(data.addressConfigs || []);
+    } else {
+      data.streetConfigs = normalizeConfigRows(data.streetConfigs || [], 'ST');
+      data.districtConfigs = normalizeConfigRows(data.districtConfigs || [], 'DST');
+    }
     data.flightActivityTypes = normalizeConfigRows(data.flightActivityTypes || [], 'FAT');
-    data.districtConfigs = normalizeConfigRows(data.districtConfigs || [], 'DST');
+    data.licenseTypes = (data.licenseTypes || []).map((item, index) => ({
+      ...item,
+      id: item.id || `LIC-T-${String(index + 1).padStart(2, '0')}`,
+      name: String(item.name || '').trim(),
+      sort: Number(item.sort) > 0 ? Number(item.sort) : index + 1,
+      state: item.state === '停用' ? '停用' : '启用',
+      uploaded: Number(item.uploaded) >= 0 ? Number(item.uploaded) : 0,
+      updated: item.updated || data.now
+    })).filter((item) => item.name);
     const enabled = data.enabledConfigNames || ((rows) => (rows || []).filter((item) => (item.state || '启用') === '启用').map((item) => item.name));
-    data.yinzhouStreets = enabled(data.streetConfigs);
+    const yinzhouDistrict = (data.addressConfigs || []).find((item) => item.name === '鄞州区');
+    data.yinzhouStreets = enabled(yinzhouDistrict?.streets || data.streetConfigs);
     data.ningboDistricts = enabled(data.districtConfigs);
   };
   const ledgerStorageKey = 'yinzhou-uom-ledger-v2';
@@ -82,8 +96,66 @@
   };
   const persistProfile = () => {
     syncCompanyMemberCount();
+    syncPersonalLicenseSummary();
     const { name, idNumber, phone, address, license, licenseFileName, affiliatedCompany, supplement } = data.profiles.personal;
     try { window.localStorage.setItem(profileStorageKey, JSON.stringify({ name, idNumber, phone, address, license, licenseFileName, affiliatedCompany, supplement, companyProfile: data.profiles.company, companySupplement: data.profiles.company.supplement, companyMembers: data.companyMembers })); } catch {}
+  };
+  const enabledLicenseTypes = () => (data.licenseTypes || [])
+    .filter((item) => (item.state || '启用') === '启用')
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.name || '').localeCompare(String(b.name || ''), 'zh'));
+  const licenseTypeById = (id) => (data.licenseTypes || []).find((item) => item.id === id);
+  const personalUserId = 'USR-001';
+  const licensesOfUser = (userId) => (data.licenses || []).filter((item) => item.userId === userId && item.status === '已上传');
+  const licenseOfUserType = (userId, typeId) => (data.licenses || []).find((item) => item.userId === userId && item.typeId === typeId);
+  const licenseSummaryText = (userId) => {
+    const types = enabledLicenseTypes();
+    const count = licensesOfUser(userId).filter((item) => types.some((type) => type.id === item.typeId)).length;
+    if (!types.length) return '暂无分类';
+    return count ? `已上传 ${count}/${types.length} 类` : '待上传';
+  };
+  const syncPersonalLicenseSummary = () => {
+    const types = enabledLicenseTypes();
+    const rows = licensesOfUser(personalUserId);
+    const count = rows.filter((item) => types.some((type) => type.id === item.typeId)).length;
+    const latest = rows.slice().sort((a, b) => String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || '')))[0];
+    data.profiles.personal.license = count ? '已上传' : '未上传';
+    data.profiles.personal.licenseFileName = latest?.fileName || '';
+    const user = data.users.find((item) => item.id === personalUserId);
+    if (user) {
+      user.license = data.profiles.personal.license;
+      user.licenseFileName = data.profiles.personal.licenseFileName;
+    }
+  };
+  const upsertPersonalLicense = (typeId, fileName) => {
+    if (!Array.isArray(data.licenses)) data.licenses = [];
+    const type = licenseTypeById(typeId);
+    if (!type) return null;
+    const existing = licenseOfUserType(personalUserId, typeId);
+    const uploadedAt = `${data.now} ${new Date().toTimeString().slice(0, 5)}`;
+    if (existing) {
+      existing.fileName = fileName;
+      existing.status = '已上传';
+      existing.uploadedAt = uploadedAt;
+      existing.typeName = type.name;
+      existing.userName = data.profiles.personal.name;
+      return existing;
+    }
+    const maxNum = data.licenses.reduce((max, row) => Math.max(max, Number(String(row.id || '').replace(/\D/g, '')) || 0), 0);
+    const row = {
+      id: `LIC-${String(maxNum + 1).padStart(2, '0')}`,
+      userId: personalUserId,
+      userName: data.profiles.personal.name,
+      typeId,
+      typeName: type.name,
+      fileName,
+      status: '已上传',
+      uploadedAt
+    };
+    data.licenses.push(row);
+    type.uploaded = (Number(type.uploaded) || 0) + 1;
+    type.updated = data.now;
+    return row;
   };
   const normalizeCertificate = (certificate) => {
     delete certificate.ocrState;
@@ -306,9 +378,21 @@
         data.feedbackForms = mapped;
       }
       if (Array.isArray(saved.messages)) data.messages = normalizeMessages(saved.messages);
-      if (Array.isArray(saved.streetConfigs)) data.streetConfigs = saved.streetConfigs;
+      if (Array.isArray(saved.addressConfigs)) data.addressConfigs = saved.addressConfigs;
+      else {
+        if (Array.isArray(saved.streetConfigs)) data.streetConfigs = saved.streetConfigs;
+        if (Array.isArray(saved.districtConfigs)) data.districtConfigs = saved.districtConfigs;
+      }
       if (Array.isArray(saved.flightActivityTypes)) data.flightActivityTypes = saved.flightActivityTypes;
-      if (Array.isArray(saved.districtConfigs)) data.districtConfigs = saved.districtConfigs;
+      if (Array.isArray(saved.licenseTypes) && saved.licenseTypes.length) data.licenseTypes = saved.licenseTypes;
+      if (Array.isArray(saved.licenses) && saved.licenses.length) data.licenses = saved.licenses;
+      if (Array.isArray(saved.banners)) {
+        const mapped = saved.banners.slice();
+        const have = new Set(mapped.map((item) => item.id));
+        (data.banners || []).forEach((seed) => { if (!have.has(seed.id)) mapped.push(seed); });
+        data.banners = mapped;
+      }
+      syncFlightConfigLists();
     } catch { window.localStorage.removeItem(publicServiceStorageKey); }
   };
   const removedMessageTemplateIds = new Set(['TPL-CHK-01', 'TPL-DRN-01', 'TPL-BLK-01']);
@@ -325,10 +409,11 @@
     read: Boolean(item.read)
   }));
   const persistPublicService = () => {
-    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, uomGuide: data.uomGuide, streetConfigs: data.streetConfigs, flightActivityTypes: data.flightActivityTypes, districtConfigs: data.districtConfigs })); } catch {}
+    try { window.localStorage.setItem(publicServiceStorageKey, JSON.stringify({ activities: data.activities, enrollments: data.enrollments, feedbacks: data.feedbacks, articles: data.articles, banners: data.banners, flights: data.flights, feedbackForms: data.feedbackForms, messages: data.messages, uomGuide: data.uomGuide, addressConfigs: data.addressConfigs, streetConfigs: data.streetConfigs, flightActivityTypes: data.flightActivityTypes, districtConfigs: data.districtConfigs, licenseTypes: data.licenseTypes, licenses: data.licenses })); } catch {}
   };
   hydratePublicService();
   syncFlightConfigLists();
+  syncPersonalLicenseSummary();
   data.messages = normalizeMessages(data.messages || []);
   const normalizeTakeoffStreet = (value, streetFallback = '') => {
     const streets = data.yinzhouStreets || [];
@@ -378,7 +463,7 @@
     } catch (_) { /* ignore */ }
     return 'mobile';
   };
-  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '' }, flightTimePicker: null, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), imagePreview: null, viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
+  const state = { role: null, modal: null, toast: '', query: '', guideTab: 'manual', guideQuery: '', guidePage: 1, faqQuery: '', faqPage: 1, certificateView: '全部', droneGroup: 'all', flightExecView: 'all', flightRangeStart: '', flightRangeEnd: '', assignDraft: { droneId: '', pilotId: '' }, tagDraft: { id: '', isPilot: false }, articleKind: 'all', messageView: 'all', mineActivities: false, selectedGuide: '', selectedFaq: '', selectedActivity: '', feedbackFormId: '', feedbackTypeOpen: false, feedbackDraft: {}, feedbackAttachments: {}, memberDraft: {}, pendingCertificate: '', pendingDrone: '', certificateMode: 'create', ocrRequest: 0, returnFocus: '', navigation: [], licenseImage: '', licenseSavedImage: '', licenseImages: {}, licenseDraftFileName: '', pendingLicenseType: '', profileDraft: {}, supplementDraft: {}, companyDraft: {}, regionPickerOpen: false, regionPickerDraft: { province: '', city: '', district: '', street: '' }, flightTimePicker: null, flightDraft: {}, flightMode: 'create', pendingFlight: '', pendingExecution: '', flightShot: 'empty', flightShotRequest: 0, areaShot: 'empty', areaShotName: '', batchStage: 'intro', batchRows: null, ocr: emptyOcr(), imagePreview: null, viewport: readViewport(), joined: new Set(data.enrollments.filter((item) => item.applicant === '陈*').map((item) => item.activityId)) };
   const icon = (path) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${path}"/></svg>`;
   const nav = [
     ['home', '首页', 'M3 12h18M6 9l6-6 6 6v12H6z'],
@@ -583,7 +668,7 @@
   const list = (items, render, { searchable = false } = {}) => `<div class="list"${searchable ? ' data-search-results' : ''}>${items.length ? items.map(render).join('') : '<div class="empty">暂无符合条件的数据</div>'}</div>`;
   const filter = (placeholder) => `<div class="filter-bar"><input id="search" value="${safe(state.query)}" placeholder="${placeholder}" aria-label="搜索" /></div>`;
   const listActions = (actions = '') => actions ? `<div class="list-actions">${actions}</div>` : '';
-  const login = () => `<section class="login-page"><div class="login-visual"><div class="login-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><span><span class="channel-mobile">浙里办 APP</span><span class="channel-desktop">浙江省政务服务网</span></span></div></div><div class="flight-lines" aria-hidden="true"></div><div class="login-message"><p>鄞州区低空安全服务</p><h1>让每一次起飞<br />都有序可查</h1><span>无人机信息管理、飞行计划与低空安全服务统一入口</span></div></div><div class="login-panel"><div class="login-panel-inner"><span class="eyebrow">用户登录</span><h2>选择登录类型</h2><p>请选择与浙里办账号对应的身份类型进入服务。</p><div class="login-options"><button class="login-option" data-action="login" data-value="personal"><span class="login-option-icon">${icon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z')}</span><span><b>个人登录</b><small>个人资料、飞行员执照与设备管理</small></span><i>›</i></button><button class="login-option" data-action="login" data-value="company"><span class="login-option-icon company">${icon('M4 21V5h16v16M8 9h2M14 9h2M8 13h2M14 13h2M10 21v-4h4v4')}</span><span><b>法人登录</b><small>企业资料、授权账号与设备管理</small></span><i>›</i></button></div><div class="login-help"><span>${icon('M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01')}</span><p>登录身份由浙江政务服务统一身份认证结果确定。</p></div></div></div></section>`;
+  const login = () => `<section class="login-page"><div class="login-visual"><div class="login-brand"><span class="brand-mark">低</span><div><b>鄞州低空智护</b><span><span class="channel-mobile">浙里办 APP</span><span class="channel-desktop">浙江省政务服务网</span></span></div></div><div class="flight-lines" aria-hidden="true"></div><div class="login-message"><p>鄞州区低空安全服务</p><h1>让每一次起飞<br />都有序可查</h1><span>无人机信息管理、飞行计划与低空安全服务统一入口</span></div></div><div class="login-panel"><div class="login-panel-inner"><span class="eyebrow">用户登录</span><h2>选择登录类型</h2><p>请选择与浙里办账号对应的身份类型进入服务。</p><div class="login-options"><button class="login-option" data-action="login" data-value="personal"><span class="login-option-icon">${icon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z')}</span><span><b>个人登录</b><small>个人资料、我的执照与设备管理</small></span><i>›</i></button><button class="login-option" data-action="login" data-value="company"><span class="login-option-icon company">${icon('M4 21V5h16v16M8 9h2M14 9h2M8 13h2M14 13h2M10 21v-4h4v4')}</span><span><b>法人登录</b><small>企业资料、授权账号与设备管理</small></span><i>›</i></button></div><div class="login-help"><span>${icon('M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8v4M12 16h.01')}</span><p>登录身份由浙江政务服务统一身份认证结果确定。</p></div></div></div></section>`;
   const publishedActivities = () => data.activities.filter((item) => !['已下架', '待确认'].includes(item.status));
   const articleSortValue = (item) => (Number(item.sort) > 0 ? Number(item.sort) : 999);
   const compareArticles = (a, b) => articleSortValue(a) - articleSortValue(b) || String(b.date || '').localeCompare(String(a.date || ''));
@@ -600,8 +685,17 @@
     const quickServices = state.role === 'company'
       ? `${quick('profile-pilots', '飞手管理', '企业飞手与设备分配', 'pilots', 'amber')}${quick('flights', '飞行计划管理', companyFlightNote, 'flights', '')}${quick('certificates', 'UOM 登记证管理', '上传、更新与注销', 'certificates', 'navy')}${quick('drones', '无人机管理', '持有与使用设备台账', 'drones', 'olive')}`
       : `${quick('flights', '飞行计划申报', '申报与执行确认', 'flights', '')}${quick('certificates', 'UOM 登记证', '上传、更新与注销', 'certificates', 'teal')}${quick('drones', '我的无人机', '持有与使用设备台账', 'drones', 'navy')}${quick('guides', 'UOM平台流程指导', '查看流程与常见问题', 'guides', 'olive')}`;
-    const heroLead = state.viewport === 'desktop' ? '' : `<p>${profile.label} · ${profile.name}</p>`;
-    return shell(`<div class="home-dashboard"><section class="hero"><div class="hero-atmosphere" aria-hidden="true"><span class="hero-glow g1"></span><span class="hero-glow g2"></span><span class="hero-glow g3"></span><span class="hero-dots"></span><span class="hero-orbit orbit-one"></span><span class="hero-orbit orbit-two"></span><span class="hero-orbit orbit-three"></span><span class="hero-cloud cloud-a"></span><span class="hero-cloud cloud-b"></span><span class="hero-flight-path path-main"><i></i></span><span class="hero-flight-path path-alt"><i></i></span><span class="hero-ring"></span><span class="hero-drone"><i></i><i></i><b></b></span></div><div class="hero-content">${heroLead}<h1>让每一次起飞<br />都有序可查</h1><small>有序起飞 · 安心抵达</small></div><div class="hero-status"><span><i></i>服务运行正常</span></div></section><section class="section services-section"><div class="section-head"><h2>常用服务</h2><button class="text-link" data-go="services">全部服务</button></div><div class="quick-grid bento-grid home-bento">${quickServices}</div></section><section class="section notice-section pinned-notice-section"><div class="section-head"><h2>法规与公告</h2><button class="text-link" data-go="knowledge">查看全部</button></div><div class="pinned-notice-list">${pinnedArticles.map((item) => `<button class="notice pinned-home-notice" data-action="article-detail" data-id="${safe(item.id)}">${articleVisual(item)}<span class="home-notice-copy"><span><b class="home-notice-kind">${safe(item.kind)}</b>${isVideoArticle(item) ? `<em>▶ ${safe(item.duration || '视频')}</em>` : ''}</span><strong>${safe(item.title)}</strong><small>${safe(item.tag || '安全提示')}</small></span><i>›</i></button>`).join('') || '<div class="empty">暂无法规与公告</div>'}</div></section><section class="section home-activity-section"><div class="section-head"><div><h2>活动中心</h2></div><button class="text-link" data-go="activities">查看全部</button></div><div class="home-activity-grid">${activities.length ? activities.map((item) => `<article class="home-activity-card"><button data-action="activity-detail" data-id="${safe(item.id)}"><div class="home-activity-cover ${safe(item.cover)}"><span>低</span></div><div><span>${safe(item.status)}</span><h3>${safe(item.title)}</h3><p>${safe(item.startTime)} · ${safe(item.place)}</p><small>报名截止 ${safe(item.enrollEnd)}</small></div><i>›</i></button></article>`).join('') : '<div class="empty">暂无报名中或进行中的活动</div>'}</div></section></div>`, 'home');
+    const heroBanners = (data.activeHomeBanners ? data.activeHomeBanners(data.banners || []) : []).filter(Boolean);
+    const bannerKindClass = (type) => (type === '活动' ? 'is-activity' : type === '低空安全普法' ? 'is-law' : 'is-news');
+    const bannerKindLabel = (type) => (type === '活动' ? '活动' : type === '低空安全普法' ? '普法' : '公告');
+    const heroBanner = heroBanners.length
+      ? `<div class="hero-banner-carousel" data-hero-banners>${heroBanners.map((item, index) => `<button type="button" class="hero-banner-slide ${bannerKindClass(item.type)}${index === 0 ? ' is-active' : ''}" data-action="open-banner" data-id="${safe(item.id)}"><span class="hero-banner-copy"><span class="hero-banner-line"><span class="hero-banner-kind">${safe(bannerKindLabel(item.type))}</span><strong>${safe(item.title)}</strong><span class="hero-banner-go" aria-hidden="true">›</span></span>${item.summary ? `<small>${safe(item.summary)}</small>` : ''}</span></button>`).join('')}</div>`
+      : '';
+    const heroIdentity = !heroBanners.length && state.viewport !== 'desktop' ? `<p>${profile.label} · ${profile.name}</p>` : '';
+    const heroBlock = heroBanners.length
+      ? `<div class="hero-stack">${heroBanner}<section class="hero"><div class="hero-atmosphere" aria-hidden="true"><span class="hero-glow g1"></span><span class="hero-glow g2"></span><span class="hero-glow g3"></span><span class="hero-dots"></span><span class="hero-orbit orbit-one"></span><span class="hero-orbit orbit-two"></span><span class="hero-orbit orbit-three"></span><span class="hero-cloud cloud-a"></span><span class="hero-cloud cloud-b"></span><span class="hero-flight-path path-main"><i></i></span><span class="hero-flight-path path-alt"><i></i></span><span class="hero-ring"></span><span class="hero-drone"><i></i><i></i><b></b></span></div><div class="hero-content">${heroIdentity}<h1>让每一次起飞<br />都有序可查</h1><small>有序起飞 · 安心抵达</small></div><div class="hero-status"><span><i></i>服务运行正常</span></div></section></div>`
+      : `<section class="hero"><div class="hero-atmosphere" aria-hidden="true"><span class="hero-glow g1"></span><span class="hero-glow g2"></span><span class="hero-glow g3"></span><span class="hero-dots"></span><span class="hero-orbit orbit-one"></span><span class="hero-orbit orbit-two"></span><span class="hero-orbit orbit-three"></span><span class="hero-cloud cloud-a"></span><span class="hero-cloud cloud-b"></span><span class="hero-flight-path path-main"><i></i></span><span class="hero-flight-path path-alt"><i></i></span><span class="hero-ring"></span><span class="hero-drone"><i></i><i></i><b></b></span></div><div class="hero-content">${heroIdentity}<h1>让每一次起飞<br />都有序可查</h1><small>有序起飞 · 安心抵达</small></div><div class="hero-status"><span><i></i>服务运行正常</span></div></section>`;
+    return shell(`<div class="home-dashboard">${heroBlock}<section class="section services-section"><div class="section-head"><h2>常用服务</h2><button class="text-link" data-go="services">全部服务</button></div><div class="quick-grid bento-grid home-bento">${quickServices}</div></section><section class="section notice-section pinned-notice-section"><div class="section-head"><h2>法规与公告</h2><button class="text-link" data-go="knowledge">查看全部</button></div><div class="pinned-notice-list">${pinnedArticles.map((item) => `<button class="notice pinned-home-notice" data-action="article-detail" data-id="${safe(item.id)}">${articleVisual(item)}<span class="home-notice-copy"><span><b class="home-notice-kind">${safe(item.kind)}</b>${isVideoArticle(item) ? `<em>▶ ${safe(item.duration || '视频')}</em>` : ''}</span><strong>${safe(item.title)}</strong><small>${safe(item.tag || '安全提示')}</small></span><i>›</i></button>`).join('') || '<div class="empty">暂无法规与公告</div>'}</div></section><section class="section home-activity-section"><div class="section-head"><div><h2>活动中心</h2></div><button class="text-link" data-go="activities">查看全部</button></div><div class="home-activity-grid">${activities.length ? activities.map((item) => `<article class="home-activity-card"><button data-action="activity-detail" data-id="${safe(item.id)}"><div class="home-activity-cover ${safe(item.cover)}"><span>低</span></div><div><span>${safe(item.status)}</span><h3>${safe(item.title)}</h3><p>${safe(item.startTime)} · ${safe(item.place)}</p><small>报名截止 ${safe(item.enrollEnd)}</small></div><i>›</i></button></article>`).join('') : '<div class="empty">暂无报名中或进行中的活动</div>'}</div></section></div>`, 'home');
   };
   const serviceGlyph = (kind) => {
     const glyphs = {
@@ -622,7 +716,7 @@
     const companyExtras = state.role === 'company'
       ? `${quick('profile-pilots', '飞手管理', '企业飞手与设备分配', 'pilots', 'amber')}`
       : '';
-    return shell(`${pageToolbar('home')}<section class="quick-grid services-grid bento-grid all-services-bento">${quick('profile', '资料管理', state.role === 'personal' ? '个人资料与飞行员执照' : '企业资料与授权账号', 'profile', '')}${companyExtras}${quick('flights', state.role === 'company' ? '飞行计划管理' : '飞行计划申报', state.role === 'company' ? (roleFlights().length ? `${roleFlights().filter((item) => item.executed === '未执行').length} 条待执行 · 共 ${roleFlights().length} 条` : '查看本公司飞行计划') : '申报与执行确认', 'flights', 'olive')}${quick('certificates', state.role === 'company' ? 'UOM 登记证管理' : 'UOM 登记证', state.role === 'company' ? '上传、更新与注销' : '上传、更新、注销', 'certificates', 'teal')}${quick('activities', '活动中心', '报名与历史记录', 'activities', '')}${quick('drones', '无人机管理', '持有与使用分组', 'drones', 'navy')}${quick('knowledge', '安全科普', '法规与新闻公告', 'knowledge', 'teal')}${quick('guides', 'UOM平台流程指导', '手册与常见问题', 'guides', 'navy')}${quick('feedback', '意见反馈', '提交建议与问题', 'feedback', 'olive')}</section>`, 'services');
+    return shell(`${pageToolbar('home')}<section class="quick-grid services-grid bento-grid all-services-bento">${quick('profile', '资料管理', state.role === 'personal' ? '个人资料与我的执照' : '企业资料与授权账号', 'profile', '')}${companyExtras}${quick('flights', state.role === 'company' ? '飞行计划管理' : '飞行计划申报', state.role === 'company' ? (roleFlights().length ? `${roleFlights().filter((item) => item.executed === '未执行').length} 条待执行 · 共 ${roleFlights().length} 条` : '查看本公司飞行计划') : '申报与执行确认', 'flights', 'olive')}${quick('certificates', state.role === 'company' ? 'UOM 登记证管理' : 'UOM 登记证', state.role === 'company' ? '上传、更新与注销' : '上传、更新、注销', 'certificates', 'teal')}${quick('activities', '活动中心', '报名与历史记录', 'activities', '')}${quick('drones', '无人机管理', '持有与使用分组', 'drones', 'navy')}${quick('knowledge', '安全科普', '法规与新闻公告', 'knowledge', 'teal')}${quick('guides', 'UOM平台流程指导', '手册与常见问题', 'guides', 'navy')}${quick('feedback', '意见反馈', '提交建议与问题', 'feedback', 'olive')}</section>`, 'services');
   };
   const profile = () => {
     const p = data.profiles[state.role];
@@ -644,7 +738,7 @@
     const accountTitle = personal ? `个人账户（${loginName}）` : `企业账户（${loginName}）`;
     const accountHero = `<button type="button" class="my-account-hero ${personal ? 'is-personal' : 'is-company'}" data-go="profile-details" aria-label="查看${personal ? '个人' : '企业'}资料">${accountMark}<div class="account-identity"><span class="account-kicker">账户中心</span><h1>${safe(accountTitle)}</h1><div class="account-meta"><span class="account-chip">${safe(p.devices)} 架设备</span>${personal && p.affiliatedCompany ? `<span class="account-chip">${safe(displayCompanyName(p.affiliatedCompany))}</span>` : ''}${personal ? '' : `<span class="account-chip">飞手 ${pilots.length} 人</span>`}</div></div><i class="account-hero-chevron" aria-hidden="true">›</i></button>`;
     const entries = personal
-      ? `${entry('profile-license', '飞行执照', p.license === '已上传' ? '已上传，可查看或更新' : '待上传', 'M5 3h14v18H5zM8 7h8M8 11h8M8 15h5', 'teal')}${entry('drones', '我的无人机', `${p.devices} 架设备`, 'M5 13h14M7 9h10M9 17h6', 'navy')}${entry('flights', '我的飞行申报', flightEntryNote, 'M3 12h18M12 3v18', 'indigo')}${entry('', '我报名的活动', joinedActivities ? `已报名 ${joinedActivities} 场` : '查看活动报名', 'M6 4v16M18 4v16M3 8h18', 'teal', 'open-my-activities')}${entry('feedback', '意见反馈', '提交建议与问题', 'M4 5h16v11H7l-3 3z', 'olive')}`
+      ? `${entry('profile-license', '我的执照', licenseSummaryText(personalUserId), 'M5 3h14v18H5zM8 7h8M8 11h8M8 15h5', 'teal')}${entry('drones', '我的无人机', `${p.devices} 架设备`, 'M5 13h14M7 9h10M9 17h6', 'navy')}${entry('flights', '我的飞行申报', flightEntryNote, 'M3 12h18M12 3v18', 'indigo')}${entry('', '我报名的活动', joinedActivities ? `已报名 ${joinedActivities} 场` : '查看活动报名', 'M6 4v16M18 4v16M3 8h18', 'teal', 'open-my-activities')}${entry('feedback', '意见反馈', '提交建议与问题', 'M4 5h16v11H7l-3 3z', 'olive')}`
       : `${entry('profile-members', '关联用户', `已关联 ${data.companyMembers.length} 人`, 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', 'teal')}${entry('profile-pilots', '飞手管理', pilots.length ? `${pilots.length} 名飞手` : '查看企业飞手', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', 'amber')}${entry('flights', '飞行计划管理', flightEntryNote, 'M3 12h18M12 3v18', 'indigo')}${entry('certificates', 'UOM 登记证管理', certificateCount ? `${certificateCount} 本有效` : '上传与管理登记证', 'M4 5h16v14H4zM8 9h8M8 13h5', 'navy')}${entry('drones', '无人机管理', `${p.devices} 架设备`, 'M5 13h14M7 9h10M9 17h6', 'olive')}`;
     return shell(`<div class="my-account-page">${accountHero}<section class="my-account-section" aria-labelledby="account-services-title"><div class="section-head"><h2 id="account-services-title">我的</h2></div><div class="profile-entry-list">${entries}</div></section></div>`, 'profile');
   };
@@ -661,9 +755,19 @@
     return shell(`${title(personal ? '个人资料' : '企业资料', true, 'profile')}<div class="profile-detail-stack"><section class="profile-detail-card"><header><div><span class="profile-kicker">${personal ? '个人基本信息' : '企业基本信息'}</span><h2>基本信息</h2></div></header><div class="detail-grid">${rows.map(([key, value]) => `<div><span>${key}</span><b>${safe(value)}</b></div>`).join('')}</div></section><section class="profile-detail-card"><header><div><span class="profile-kicker">${personal ? '个人补充信息' : '企业补充信息'}</span><h2>补充信息</h2></div><button class="secondary-btn compact-btn" data-action="modal" data-modal="${personal ? 'supplement' : 'company-supplement'}">编辑</button></header><div class="detail-grid">${supplementRows.map(([key, value]) => `<div><span>${key}</span><b>${safe(value)}</b></div>`).join('')}</div></section></div>`, 'profile');
   };
   const profileLicense = () => {
-    const p = data.profiles.personal;
-    const licenseThumb = state.licenseSavedImage ? `<figure class="license-thumb">${zoomableImage(state.licenseSavedImage, '已上传的飞行执照照片', 'zoomable-image--thumb')}<figcaption>${safe(p.licenseFileName || '飞行执照图片')}</figcaption></figure>` : p.licenseFileName ? `<div class="license-thumb placeholder"><span>${icon('M4 5h16v14H4zM8 9h8M8 13h5')}</span><b>${safe(p.licenseFileName)}</b><small>当前浏览器会话未保留原图</small></div>` : '';
-    return shell(`${title('飞行执照', true, 'profile')}<section class="profile-detail-card license-card"><header><div><span class="profile-kicker">飞行员执照管理</span><h2>飞行执照图片</h2></div>${status(p.license)}</header><p>${p.licenseFileName ? `已上传：${safe(p.licenseFileName)}` : '上传清晰的飞行员操作执照图片。'}</p>${licenseThumb}<button class="secondary-btn" data-action="modal" data-modal="license">${p.license === '未上传' ? '上传执照图片' : '更新执照图片'}</button></section>`, 'profile');
+    const types = enabledLicenseTypes();
+    const cards = types.length ? types.map((type) => {
+      const record = licenseOfUserType(personalUserId, type.id);
+      const uploaded = record?.status === '已上传';
+      const preview = state.licenseImages[type.id] || (uploaded && type.id === enabledLicenseTypes()[0]?.id ? state.licenseSavedImage : '');
+      const licenseThumb = preview
+        ? `<figure class="license-thumb">${zoomableImage(preview, '已上传的飞行执照照片', 'zoomable-image--thumb')}<figcaption>${safe(record?.fileName || '飞行执照图片')}</figcaption></figure>`
+        : record?.fileName
+          ? `<div class="license-thumb placeholder"><span>${icon('M4 5h16v14H4zM8 9h8M8 13h5')}</span><b>${safe(record.fileName)}</b><small>当前浏览器会话未保留原图</small></div>`
+          : '';
+      return `<section class="profile-detail-card license-card"><header><div><span class="profile-kicker">我的执照</span><h2>${safe(type.name)}</h2></div>${status(uploaded ? '已上传' : '未上传')}</header>${licenseThumb}<button class="secondary-btn" data-action="modal" data-modal="license" data-id="${safe(type.id)}">${uploaded ? '更新执照图片' : '上传执照图片'}</button></section>`;
+    }).join('') : '<div class="empty">暂无开放的执照分类</div>';
+    return shell(`${title('我的执照', true, 'profile')}<div class="license-type-list">${cards}</div>`, 'profile');
   };
   const profileMembers = () => {
     const canConfig = canManageEnterprise();
@@ -1033,7 +1137,9 @@
     const draft = state.regionPickerDraft || {};
     const provinces = (data.residenceProvinceOptions && data.residenceProvinceOptions()) || [];
     const cities = (data.residenceCityOptions && data.residenceCityOptions(draft.province)) || [];
-    const districts = (data.residenceDistrictOptions && data.residenceDistrictOptions(draft.province, draft.city)) || [];
+    const districts = (data.addressDistrictOptions && data.addressDistrictOptions(draft.province, draft.city))
+      || (data.residenceDistrictOptions && data.residenceDistrictOptions(draft.province, draft.city))
+      || [];
     const col = (level, label, items, selected) => `<div class="region-picker-col" role="listbox" aria-label="${label}">${items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-region" data-level="${level}" data-value="${safe(item)}" role="option" aria-selected="${selected === item ? 'true' : 'false'}">${safe(item)}</button>`).join('') || `<span class="region-picker-empty">暂无选项</span>`}</div>`;
     return `<div class="region-picker-layer" role="dialog" aria-modal="true" aria-label="选择省市区"><section class="region-picker"><div class="region-picker-wheel"><div class="region-picker-highlight" aria-hidden="true"></div>${col('province', '省', provinces, draft.province)}${col('city', '市', cities, draft.city)}${col('district', '区', districts, draft.district)}</div><div class="region-picker-actions"><button type="button" class="secondary-btn" data-action="cancel-region-picker">取消</button><button type="button" class="primary-btn" data-action="confirm-region-picker">确定</button></div></section></div>`;
   };
@@ -1251,10 +1357,12 @@
     }
     if (type === 'profile' || type === 'company-profile') return '';
     if (type === 'license') {
-      const p = data.profiles.personal;
-      const previewImage = state.licenseImage || state.licenseSavedImage;
-      const preview = previewImage ? zoomableImage(previewImage, '已选择的飞行执照图片', 'zoomable-image--block', 'license-preview-image') : `<div class="license-preview-placeholder"><b>飞行员操作执照</b><span>${p.licenseFileName ? safe(p.licenseFileName) : '请选择 JPG 或 PNG 图片'}</span></div>`;
-      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">飞行员执照管理</h2><div class="license-upload">${preview}<label class="upload-drop" for="license-file"><input id="license-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span><b>选择执照图片</b><small>支持 JPG、PNG，单张不超过 10 MB</small><em>上传图片</em></label></div><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-license">确认提交</button></div></section></div>`;
+      const type = licenseTypeById(state.pendingLicenseType) || enabledLicenseTypes()[0];
+      const record = type ? licenseOfUserType(personalUserId, type.id) : null;
+      const previewImage = state.licenseImage || (type ? state.licenseImages[type.id] : '') || state.licenseSavedImage;
+      const fileHint = state.licenseDraftFileName || record?.fileName || '';
+      const preview = previewImage ? zoomableImage(previewImage, '已选择的飞行执照图片', 'zoomable-image--block', 'license-preview-image') : `<div class="license-preview-placeholder"><b>${safe(type?.name || '飞行执照')}</b><span>${fileHint ? safe(fileHint) : '请选择 JPG 或 PNG 图片'}</span></div>`;
+      return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">${safe(type?.name || '我的执照')}</h2><div class="license-upload">${preview}<label class="upload-drop" for="license-file"><input id="license-file" type="file" accept="image/png,image/jpeg" /><span class="upload-icon">${icon('M12 16V4M7 9l5-5 5 5M5 20h14')}</span><b>选择执照图片</b><small>支持 JPG、PNG，单张不超过 10 MB</small><em>上传图片</em></label></div><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-license">确认提交</button></div></section></div>`;
     }
     if (type === 'flight') {
       const editing = state.flightMode === 'edit';
@@ -1303,7 +1411,7 @@
     if (type === 'supplement') {
       const draft = state.supplementDraft;
       const regionLabel = (data.formatResidenceRegionLabel && data.formatResidenceRegionLabel(draft)) || [draft.province, draft.city, draft.district].filter(Boolean).join(' / ');
-      const addressField = `<div class="compound-field region-cascade"><button type="button" class="region-trigger${regionLabel ? '' : ' is-placeholder'}" data-action="open-region-picker"><span>${safe(regionLabel || '请选择省市区')}</span><i class="region-trigger-caret" aria-hidden="true"></i></button><input data-supplement-field="addressDetail" value="${safe(draft.addressDetail || '')}" placeholder="请填写详细地址，如街道、路名门牌号" /></div>`;
+      const addressField = `<div class="compound-field region-cascade"><button type="button" class="region-trigger${regionLabel ? '' : ' is-placeholder'}" data-action="open-region-picker"><span>${safe(regionLabel || '请选择省市区')}</span><i class="region-trigger-caret" aria-hidden="true"></i></button><input data-supplement-field="addressDetail" value="${safe(draft.addressDetail || '')}" placeholder="请填写详细地址，如路名门牌号" /></div>`;
       return `<div class="modal-layer" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section class="modal"><h2 id="modal-title" tabindex="-1">编辑个人补充信息</h2><form class="form-stack" id="supplement-form">${formField('常住地址', addressField)}${formField('紧急联系人', `<input data-supplement-field="emergencyContact" value="${safe(draft.emergencyContact || '')}" />`, { required: false })}${formField('紧急联系电话', `<input type="tel" inputmode="numeric" data-supplement-field="emergencyPhone" value="${safe(draft.emergencyPhone || '')}" />`, { required: false })}</form><div class="modal-actions"><button class="secondary-btn" data-action="close-modal">取消</button><button class="primary-btn" data-action="save-supplement">保存补充信息</button></div></section></div>`;
     }
     if (type === 'company-supplement') {
@@ -1403,6 +1511,21 @@
     if (state.modal) setTimeout(() => document.querySelector('#modal-title')?.focus(), 0);
     if (state.regionPickerOpen) setTimeout(() => document.querySelectorAll('.region-picker-layer:not(.flight-time-picker-layer) .region-picker-item.is-active').forEach((node) => node.scrollIntoView({ block: 'center' })), 0);
     if (state.flightTimePicker) scrollFlightTimePickerActive();
+    startHeroBannerRotate();
+  };
+  let heroBannerTimer = 0;
+  const startHeroBannerRotate = () => {
+    if (heroBannerTimer) window.clearInterval(heroBannerTimer);
+    const root = app.querySelector('[data-hero-banners]');
+    if (!root) return;
+    const slides = [...root.querySelectorAll('.hero-banner-slide')];
+    if (slides.length < 2) return;
+    let index = Math.max(0, slides.findIndex((slide) => slide.classList.contains('is-active')));
+    heroBannerTimer = window.setInterval(() => {
+      slides[index].classList.remove('is-active');
+      index = (index + 1) % slides.length;
+      slides[index].classList.add('is-active');
+    }, 4000);
   };
   const announce = (text) => { state.toast = text; render(); setTimeout(() => { state.toast = ''; render(); }, 2200); };
   const closeModal = () => {
@@ -1482,7 +1605,11 @@
       }
       if (state.modal === 'company-supplement') state.companyDraft = { ...(data.profiles.company.supplement || {}) };
       if (state.modal === 'company-profile') state.companyDraft = { name: data.profiles.company.name || '', creditCode: data.profiles.company.creditCode || '', verified: data.profiles.company.verified || '已认证', contact: data.profiles.company.contact || '', phone: data.profiles.company.phone || '', syncState: data.profiles.company.syncState || '已同步' };
-      if (state.modal === 'license') state.licenseImage = '';
+      if (state.modal === 'license') {
+        state.licenseImage = '';
+        state.licenseDraftFileName = '';
+        state.pendingLicenseType = target.dataset.id || enabledLicenseTypes()[0]?.id || '';
+      }
       if (state.modal === 'certificate') { state.certificateMode = 'create'; state.pendingCertificate = ''; state.ocr = emptyOcr(); }
       if (state.modal === 'flight') {
         if (state.role === 'company') { announce('企业账号仅可查看本公司飞行计划'); state.modal = null; return; }
@@ -1657,7 +1784,9 @@
       } else if (level === 'district') {
         next.district = value;
       }
-      state.regionPickerDraft = data.normalizeResidenceSelection ? data.normalizeResidenceSelection(next) : next;
+      state.regionPickerDraft = data.normalizeResidenceSelection
+        ? data.normalizeResidenceSelection(next)
+        : next;
       render();
       return;
     }
@@ -1925,15 +2054,34 @@
     }
     if (action === 'save-license') {
       if (!state.licenseImage) { announce('请先选择执照图片'); return; }
-      data.profiles.personal.license = '已上传';
+      const typeId = state.pendingLicenseType || enabledLicenseTypes()[0]?.id || '';
+      if (!typeId || !licenseTypeById(typeId)) { announce('当前没有可上传的执照分类'); return; }
+      const fileName = state.licenseDraftFileName || '飞行执照图片';
+      upsertPersonalLicense(typeId, fileName);
+      state.licenseImages[typeId] = state.licenseImage;
       state.licenseSavedImage = state.licenseImage;
       persistProfile();
+      persistPublicService();
       state.modal = null;
+      state.licenseImage = '';
+      state.licenseDraftFileName = '';
       announce('飞行执照图片已保存');
     }
     if (action === 'detail') { state.navigation.push(route()); location.hash = `#/detail/${target.dataset.kind}/${target.dataset.id}`; }
     if (action === 'pilot-detail') { state.navigation.push(route()); location.hash = `#/profile-pilot/${target.dataset.id}`; }
     if (action === 'activity-detail') { state.navigation.push(route()); location.hash = `#/activity/${target.dataset.id}`; }
+    if (action === 'open-banner') {
+      const banner = (data.banners || []).find((item) => item.id === target.dataset.id);
+      if (!banner) { announce('推送内容已失效'); return; }
+      state.navigation.push(route());
+      if (banner.type === '活动') location.hash = `#/activity/${banner.targetId}`;
+      else {
+        const article = data.articles.find((item) => item.id === banner.targetId);
+        if (article) { article.views += 1; persistPublicService(); }
+        location.hash = `#/article/${banner.targetId}`;
+      }
+      return;
+    }
     if (action === 'article-detail') { const item = data.articles.find((article) => article.id === target.dataset.id); if (item) { item.views += 1; persistPublicService(); } state.navigation.push(route()); location.hash = `#/article/${target.dataset.id}`; }
     if (action === 'open-enroll') { state.selectedActivity = target.dataset.id; state.modal = 'enrollment'; state.returnFocus = `[data-action="open-enroll"][data-id="${safe(target.dataset.id)}"]`; render(); }
     if (action === 'show-enrollment') { state.selectedActivity = target.dataset.id; state.modal = 'enrollment-record'; render(); }
@@ -2123,7 +2271,11 @@
       if (!file || !['image/png','image/jpeg'].includes(file.type)) { announce('请上传 JPG 或 PNG 格式的执照图片'); return; }
       if (file.size > 10 * 1024 * 1024) { announce('执照图片超过 10 MB，请压缩后重新上传'); return; }
       const reader = new FileReader();
-      reader.addEventListener('load', () => { state.licenseImage = typeof reader.result === 'string' ? reader.result : ''; data.profiles.personal.licenseFileName = file.name || '飞行执照图片'; render(); });
+      reader.addEventListener('load', () => {
+        state.licenseImage = typeof reader.result === 'string' ? reader.result : '';
+        state.licenseDraftFileName = file.name || '飞行执照图片';
+        render();
+      });
       reader.addEventListener('error', () => announce('图片读取失败，请重新选择'));
       reader.readAsDataURL(file);
       return;

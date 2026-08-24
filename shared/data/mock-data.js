@@ -6,6 +6,13 @@
     '邱隘镇', '五乡镇', '云龙镇', '古林镇', '石碶镇', '横溪镇', '姜山镇',
     '洞桥镇', '鄞江镇', '章水镇', '龙观乡', '东钱湖镇'
   ];
+  const normalizeStreetRows = (rows = [], prefix = 'ST') => (rows || []).map((item, index) => ({
+    id: item.id || `${prefix}-${String(index + 1).padStart(2, '0')}`,
+    name: String(item.name || '').trim(),
+    sort: Number(item.sort) > 0 ? Number(item.sort) : index + 1,
+    state: item.state === '停用' ? '停用' : '启用',
+    updated: item.updated || now
+  })).filter((item) => item.name);
   const streetConfigs = yinzhouStreets.map((name, index) => ({
     id: `ST-${String(index + 1).padStart(2, '0')}`,
     name,
@@ -25,6 +32,43 @@
     state: '启用',
     updated: now
   }));
+  const buildAddressConfigs = () => districtConfigs.map((district) => ({
+    ...district,
+    streets: district.name === '鄞州区' ? streetConfigs.map((street) => ({ ...street })) : []
+  }));
+  let addressConfigs = buildAddressConfigs();
+  const syncAddressConfigs = (source = addressConfigs) => {
+    addressConfigs = (source || []).map((district, index) => ({
+      id: district.id || `DST-${String(index + 1).padStart(2, '0')}`,
+      name: String(district.name || '').trim(),
+      sort: Number(district.sort) > 0 ? Number(district.sort) : index + 1,
+      state: district.state === '停用' ? '停用' : '启用',
+      updated: district.updated || now,
+      streets: normalizeStreetRows(district.streets || [], 'ST')
+    })).filter((item) => item.name);
+    const nextDistricts = [];
+    const nextStreets = [];
+    addressConfigs.forEach((district) => {
+      nextDistricts.push({ id: district.id, name: district.name, sort: district.sort, state: district.state, updated: district.updated });
+      (district.streets || []).forEach((street) => {
+        nextStreets.push({ ...street, districtId: district.id, districtName: district.name });
+      });
+    });
+    districtConfigs.splice(0, districtConfigs.length, ...nextDistricts);
+    streetConfigs.splice(0, streetConfigs.length, ...nextStreets);
+    return addressConfigs;
+  };
+  syncAddressConfigs();
+  const licenseTypes = [
+    { id: 'LIC-T-01', name: '民用无人驾驶航空器操控员执照', sort: 1, state: '启用', uploaded: 864, updated: now },
+    { id: 'LIC-T-02', name: '无人机驾驶员合格证', sort: 2, state: '启用', uploaded: 412, updated: now },
+    { id: 'LIC-T-03', name: '超视距驾驶员执照', sort: 3, state: '启用', uploaded: 198, updated: now }
+  ];
+  const licenses = [
+    { id: 'LIC-01', userId: 'USR-002', userName: '李女士', typeId: 'LIC-T-01', typeName: '民用无人驾驶航空器操控员执照', fileName: '操控员执照.png', status: '已上传', uploadedAt: '2026-07-18 10:20' },
+    { id: 'LIC-02', userId: 'USR-002', userName: '李女士', typeId: 'LIC-T-02', typeName: '无人机驾驶员合格证', fileName: '驾驶员合格证.png', status: '已上传', uploadedAt: '2026-07-21 14:08' },
+    { id: 'LIC-03', userId: 'USR-003', userName: '吴先生', typeId: 'LIC-T-01', typeName: '民用无人驾驶航空器操控员执照', fileName: '操控员执照.jpg', status: '已上传', uploadedAt: '2026-07-26 09:40' }
+  ];
   const enabledConfigNames = (rows) => (rows || [])
     .filter((item) => (item.state || '启用') === '启用')
     .slice()
@@ -101,40 +145,73 @@
     const item = { province: supplement.province || '', city: supplement.city || '', district: supplement.district || '' };
     return item.province && item.city && item.district ? `${item.province}|${item.city}|${item.district}` : '';
   };
+  const addressDistrictOptions = (province = '', city = '') => {
+    if (province === '浙江省' && city === '宁波市') return enabledConfigNames(addressConfigs);
+    return residenceDistrictOptions(province, city);
+  };
+  const addressStreetOptions = (districtName = '') => {
+    const district = addressConfigs.find((item) => item.name === districtName && (item.state || '启用') === '启用');
+    if (!district) return [];
+    return enabledConfigNames(district.streets || []);
+  };
+  const normalizeAddressSelection = (seed = {}) => {
+    const base = normalizeResidenceSelection(seed);
+    let street = String(seed.street || '').trim();
+    if (base.province === '浙江省' && base.city === '宁波市') {
+      const districts = addressDistrictOptions(base.province, base.city);
+      if (districts.length && !districts.includes(base.district)) base.district = districts[0] || base.district;
+      const streets = addressStreetOptions(base.district);
+      if (street && streets.length && !streets.includes(street)) street = '';
+    } else {
+      street = '';
+    }
+    return { ...base, street };
+  };
   const normalizePersonalSupplement = (supplement = {}) => {
     let province = String(supplement.province || '').trim();
     let city = String(supplement.city || '').trim();
     let district = String(supplement.district || '').trim();
     let street = String(supplement.street || '').trim();
     let addressDetail = String(supplement.addressDetail || '').trim();
-    const streets = enabledConfigNames((typeof window !== 'undefined' && window.LowAltitudeMock && window.LowAltitudeMock.streetConfigs) || streetConfigs);
-    // 旧口径：district 存街道名
-    if (district && streets.includes(district)) {
+    const legacyStreets = enabledConfigNames(streetConfigs);
+    if (district && legacyStreets.includes(district)) {
       street = street || district;
       district = '鄞州区';
       province = province || '浙江省';
       city = city || '宁波市';
     }
     if (!street && supplement.usualArea) {
-      street = streets.find((name) => String(supplement.usualArea).includes(name)) || '';
+      street = legacyStreets.find((name) => String(supplement.usualArea).includes(name)) || '';
       if (street) {
         province = province || '浙江省';
         city = city || '宁波市';
         district = district || '鄞州区';
       }
     }
-    // 街道并入手填详细地址
-    if (street) {
-      if (!addressDetail.includes(street)) addressDetail = [street, addressDetail].filter(Boolean).join('');
-      street = '';
+    if (!street && addressDetail) {
+      const candidates = addressStreetOptions(district || '鄞州区').length
+        ? addressStreetOptions(district || '鄞州区')
+        : legacyStreets;
+      const hit = candidates.find((name) => addressDetail.includes(name));
+      if (hit) {
+        street = hit;
+        addressDetail = addressDetail.replace(hit, '').trim();
+      }
     }
+    const picked = normalizeAddressSelection({ province, city, district, street });
+    province = picked.province;
+    city = picked.city;
+    district = picked.district;
+    street = picked.street || street;
     if (province && !residenceRegions[province]) province = '';
     if (city && !residenceCityOptions(province).includes(city)) city = '';
-    if (district && !residenceDistrictOptions(province, city).includes(district)) district = '';
+    if (district && !addressDistrictOptions(province, city).includes(district)) district = '';
+    if (street && !addressStreetOptions(district).includes(street)) street = '';
     return {
       province,
       city,
       district,
+      street,
       addressDetail,
       emergencyContact: String(supplement.emergencyContact || ''),
       emergencyPhone: String(supplement.emergencyPhone || '')
@@ -142,14 +219,51 @@
   };
   const formatResidenceAddress = (supplement = {}) => {
     const item = normalizePersonalSupplement(supplement);
-    return [item.province, item.city, item.district, item.addressDetail].filter(Boolean).join('');
+    return [item.province, item.city, item.district, item.street, item.addressDetail].filter(Boolean).join('');
   };
+  const bannerTypes = ['活动', '低空安全普法', '公告'];
+  const parseBannerTime = (value) => {
+    const stamp = Date.parse(String(value || '').replace(' ', 'T'));
+    return Number.isNaN(stamp) ? 0 : stamp;
+  };
+  const bannerPeriodState = (item, nowDate = now) => {
+    if ((item?.state || '已启用') === '已停用') return '已停用';
+    const clock = parseBannerTime(`${nowDate} 12:00`);
+    const start = parseBannerTime(item?.startAt);
+    const end = parseBannerTime(item?.endAt);
+    if (start && clock < start) return '未开始';
+    if (end && clock > end) return '已过期';
+    return '生效中';
+  };
+  const bannerSources = (type, payload = {}) => {
+    if (type === '活动') {
+      return (payload.activities || []).filter((item) => item.status !== '已下架').map((item) => ({ id: item.id, title: item.title, summary: item.summary || '' }));
+    }
+    const kind = type === '低空安全普法' ? '法规' : '公告';
+    return (payload.articles || []).filter((item) => item.kind === kind && item.status === '已发布').map((item) => ({ id: item.id, title: item.title, summary: item.summary || '' }));
+  };
+  const bannerSourceCopy = (type, targetId, payload = {}) => {
+    const list = bannerSources(type, payload);
+    const item = list.find((row) => row.id === targetId) || list[0] || { id: '', title: '', summary: '' };
+    return { type, targetId: item.id, targetTitle: item.title, title: item.title, summary: item.summary };
+  };
+  const activeHomeBanners = (list = [], nowDate = now) => (list || [])
+    .filter((item) => bannerPeriodState(item, nowDate) === '生效中')
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 999) - (Number(b.sort) || 999) || String(a.id).localeCompare(String(b.id)));
   window.LowAltitudeMock = {
     now,
     yinzhouStreets,
     streetConfigs,
+    addressConfigs,
+    syncAddressConfigs,
+    addressDistrictOptions,
+    addressStreetOptions,
+    normalizeAddressSelection,
     flightActivityTypes,
     districtConfigs,
+    licenseTypes,
+    licenses,
     ningboDistricts: enabledConfigNames(districtConfigs),
     formatNingboDistrictLabel,
     parseNingboDistrictName,
@@ -165,8 +279,13 @@
     enabledConfigNames,
     normalizePersonalSupplement,
     formatResidenceAddress,
+    bannerTypes,
+    bannerPeriodState,
+    bannerSources,
+    bannerSourceCopy,
+    activeHomeBanners,
     profiles: {
-      personal: { label: '个人用户', name: '陈先生（演示）', idNumber: '3302**********0412', verified: '已实名认证', syncState: '已同步', license: '未上传', licenseFileName: '', phone: '138****2408', address: '鄞州区（示例地址）', devices: 2, affiliatedCompany: '鄞州云航服务有限公司（演示）', supplement: { province: '浙江省', city: '宁波市', district: '鄞州区', addressDetail: '下应街道示范路 128 号（演示）', emergencyContact: '陈女士（演示）', emergencyPhone: '139****6120' } },
+      personal: { label: '个人用户', name: '陈先生（演示）', idNumber: '3302**********0412', verified: '已实名认证', syncState: '已同步', license: '未上传', licenseFileName: '', phone: '138****2408', address: '鄞州区（示例地址）', devices: 2, affiliatedCompany: '鄞州云航服务有限公司（演示）', supplement: { province: '浙江省', city: '宁波市', district: '鄞州区', street: '下应街道', addressDetail: '示范路 128 号（演示）', emergencyContact: '陈女士（演示）', emergencyPhone: '139****6120' } },
       company: { label: '法人用户', name: '鄞州云航服务有限公司（演示）', creditCode: '9133**********8X', verified: '已认证', syncState: '已同步', supplementState: '已完善', contact: '王女士（演示）', phone: '139****1682', devices: 5, supplement: { droneUsage: '巡检、航拍影像、安防巡查服务（演示）', safetyOfficer: '周先生（演示）', safetyPhone: '137****5026' } }
     },
     companyMembers: [
@@ -292,6 +411,13 @@
       { id: 'NEWS-03', kind: '公告', mediaType: '图文', coverKind: 'image', cover: 'service', status: '已发布', sort: 7, title: 'UOM 登记信息归集服务维护提醒', date: '2026-07-23', summary: '登记证图片请保持清晰完整，提交前可核对识别出的设备字段。', source: '鄞州区低空安全服务中心', views: 516, content: ['本服务用于归集已完成实名登记的设备信息，方便用户管理设备台账。', '上传的材料仅用于展示原型中的字段归集效果，实际登记以国家平台要求为准。'] },
       { id: 'NEWS-04', kind: '公告', mediaType: '视频', coverKind: 'video', cover: 'event', duration: '02:35', status: '已发布', sort: 8, title: '低空安全宣传进社区活动回顾', date: '2026-07-19', summary: '通过案例讲解、设备展示和互动答疑普及安全飞行常识。', source: '鄞州区低空安全服务中心', views: 438, content: ['活动现场围绕文明飞行、设备保管和飞行风险识别开展互动讲解。', '后续活动安排请关注新闻公告和活动中心的最新发布信息。'] },
       { id: 'GUIDE-01', kind: '指引', mediaType: '图文', coverKind: 'image', cover: 'guide', status: '已发布', sort: 9, title: 'UOM 登记信息归集操作指引', date: '2026-07-15', summary: '完成国家平台登记后，可在本服务上传登记证图片归集设备台账。', source: '鄞州区低空安全服务中心', views: 2104, content: ['本服务用于归集已完成实名登记的设备信息，便于用户管理台账和填报飞行计划。', '上传的登记证图片仅在当前会话中用于字段提取，确认保存后仅保留脱敏字段。'] }
+    ],
+    banners: [
+      { id: 'BAN-01', type: '活动', targetId: 'ACT-01', targetTitle: '2026 年鄞州区无人机飞行安全培训', title: '安全培训开始报名', summary: '面向个人飞手与企业经办人，完成实名登记与飞行前检查培训。', startAt: '2026-07-20T00:00', endAt: '2026-08-20T23:59', state: '已启用', sort: 1 },
+      { id: 'BAN-02', type: '低空安全普法', targetId: 'LAW-01', targetTitle: '无人驾驶航空器飞行安全提示', title: '起飞前请完成安全提示核对', summary: '飞行前请完成设备检查、区域确认和必要的飞行计划申报。', startAt: '2026-07-21T00:00', endAt: '2026-08-31T23:59', state: '已启用', sort: 2 },
+      { id: 'BAN-03', type: '公告', targetId: 'NEWS-01', targetTitle: '2026 年低空安全宣传月活动安排公告', title: '八月宣传月活动安排已发布', summary: '八月将开展安全培训、社区宣传和企业合规使用专题活动。', startAt: '2026-07-25T00:00', endAt: '2026-08-15T23:59', state: '已启用', sort: 3 },
+      { id: 'BAN-04', type: '活动', targetId: 'ACT-02', targetTitle: '夏季低空安全宣传进社区', title: '社区宣传活动即将开放', summary: '通过案例讲解、设备展示和咨询答疑，普及安全飞行常识。', startAt: '2026-09-01T00:00', endAt: '2026-09-30T23:59', state: '已启用', sort: 4 },
+      { id: 'BAN-05', type: '公告', targetId: 'NEWS-02', targetTitle: '夏季无人机飞行安全提示（视频版）', title: '夏季飞行安全提示（已停用）', summary: '高温、强对流天气期间，请加强电池管理并避免在人员密集区域起降。', startAt: '2026-07-01T00:00', endAt: '2026-08-31T23:59', state: '已停用', sort: 5 }
     ],
     uomGuide: {
       updated: '2026-08-02',

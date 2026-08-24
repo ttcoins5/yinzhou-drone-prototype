@@ -7,13 +7,15 @@
     .replaceAll('"', '&quot;');
 
   const NO_EDIT = new Set(['certificates', 'drones', 'feedback', 'accounts', 'sys-users', 'roles', 'menus', 'dicts', 'config', 'login-logs', 'flights', 'enrollments', 'audit', 'alerts', 'interface', 'users', 'companies', 'messages']);
-  const FORM_MODULES = new Set(['activities', 'laws', 'news', 'guides', 'faq', 'feedback-forms', 'users', 'companies', 'volunteers', 'blacklist', 'verification']);
+  const FORM_MODULES = new Set(['activities', 'laws', 'news', 'banners', 'guides', 'faq', 'feedback-forms', 'users', 'companies', 'volunteers', 'blacklist', 'verification']);
 
   const statusKind = (value) => {
     const text = String(value || '');
     if (text === '报名中') return 'warning';
     if (text === '进行中') return 'info';
-    if (text === '已结束') return 'muted';
+    if (text === '已结束' || text === '已过期') return 'muted';
+    if (text === '生效中') return 'success';
+    if (text === '未开始') return 'warning';
     if (text === '已下架') return 'danger';
     if (text === '在库') return 'info';
     if (text === '已配发' || text === '已领用') return 'success';
@@ -151,6 +153,41 @@
 
   const field = (label, control) => `<label class="form-field"><span>${escape(label)}</span>${control}</label>`;
 
+  const regionDistrictOptions = (mock, province, city, useAddressDistricts = false) => {
+    if (!province || !city) return [];
+    if (useAddressDistricts && mock.addressDistrictOptions) {
+      return mock.addressDistrictOptions(province, city)
+        || (mock.residenceDistrictOptions && mock.residenceDistrictOptions(province, city))
+        || [];
+    }
+    return (mock.residenceDistrictOptions && mock.residenceDistrictOptions(province, city)) || [];
+  };
+
+  const regionCascader = (draft = {}, mock = {}, opts = {}) => {
+    const open = Boolean(opts.open);
+    const active = opts.active || {};
+    const activeProvince = String(active.province || '').trim();
+    const activeCity = String(active.city || '').trim();
+    const activeDistrict = String(active.district || '').trim();
+    const provinces = (mock.residenceProvinceOptions && mock.residenceProvinceOptions()) || [];
+    const cities = activeProvince ? ((mock.residenceCityOptions && mock.residenceCityOptions(activeProvince)) || []) : [];
+    const districts = activeProvince && activeCity
+      ? regionDistrictOptions(mock, activeProvince, activeCity, opts.useAddressDistricts)
+      : [];
+    const label = draft.province && draft.city && draft.district
+      ? [draft.province, draft.city, draft.district].join(' / ')
+      : '';
+    const node = (level, value, selected, hasChildren) => `<button type="button" class="admin-cascader-node${selected ? ' is-active' : ''}${hasChildren ? ' has-children' : ''}" data-action="pick-region-cascader" data-level="${escape(level)}" data-value="${escape(value)}"><span>${escape(value)}</span>${hasChildren ? '<i aria-hidden="true"></i>' : ''}</button>`;
+    const menu = (items, renderItem) => items.length
+      ? items.map(renderItem).join('')
+      : '<span class="admin-cascader-empty">暂无选项</span>';
+    const provinceMenu = menu(provinces, (item) => node('province', item, item === activeProvince, true));
+    const cityMenu = menu(cities, (item) => node('city', item, item === activeCity, true));
+    const districtMenu = menu(districts, (item) => node('district', item, item === activeDistrict, false));
+    const panelClass = ['admin-cascader-panel', activeProvince ? 'has-city' : '', activeProvince && activeCity ? 'has-district' : ''].filter(Boolean).join(' ');
+    return `<div class="admin-cascader${open ? ' is-open' : ''}"><button type="button" class="admin-cascader-trigger${label ? '' : ' is-placeholder'}" data-action="toggle-region-cascader" aria-expanded="${open ? 'true' : 'false'}"><span>${escape(label || '请选择省 / 市 / 区')}</span><i class="admin-cascader-caret" aria-hidden="true"></i></button><div class="${panelClass}"><div class="admin-cascader-menu" role="listbox" aria-label="省">${provinceMenu}</div>${activeProvince ? `<div class="admin-cascader-menu admin-cascader-menu--city" role="listbox" aria-label="市">${cityMenu}</div>` : ''}${activeProvince && activeCity ? `<div class="admin-cascader-menu admin-cascader-menu--district" role="listbox" aria-label="区">${districtMenu}</div>` : ''}</div><input type="hidden" data-draft-field="province" value="${escape(draft.province || '')}" /><input type="hidden" data-draft-field="city" value="${escape(draft.city || '')}" /><input type="hidden" data-draft-field="district" value="${escape(draft.district || '')}" /></div>`;
+  };
+
   global.AdminUI = {
     NO_EDIT,
     FORM_MODULES,
@@ -167,6 +204,7 @@
     uploadField,
     sortStepper,
     field,
+    regionCascader,
     zoomableImage,
     makeImagesZoomable
   };

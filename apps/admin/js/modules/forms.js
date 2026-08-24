@@ -83,9 +83,47 @@
     }
     if (key === 'volunteers') {
       const src = isNew ? null : data.volunteers.find((v) => v.id === id);
+      const mock = (typeof window !== 'undefined' && window.LowAltitudeMock) || {};
+      const address = mock.normalizePersonalSupplement
+        ? mock.normalizePersonalSupplement({
+          province: src?.province,
+          city: src?.city,
+          district: src?.district,
+          addressDetail: src?.addressDetail || src?.street || ''
+        })
+        : {
+          province: src?.province || '浙江省',
+          city: src?.city || '宁波市',
+          district: src?.district || '',
+          addressDetail: src?.addressDetail || src?.street || ''
+        };
       return src
-        ? { name: src.name || '', phone: src.phone || '', volunteerType: src.volunteerType || '低空爱好者', area: src.area || '', confirmedAt: src.confirmedAt || '', userId: src.userId || '', entryMode: src.userId ? 'user' : 'manual' }
-        : { name: '', phone: '', volunteerType: '低空爱好者', area: '', confirmedAt: '', userId: '', entryMode: 'user' };
+        ? {
+          name: src.name || '',
+          phone: src.phone || '',
+          volunteerType: src.volunteerType || '低空爱好者',
+          province: address.province || '浙江省',
+          city: address.city || '宁波市',
+          district: address.district || '',
+          addressDetail: address.addressDetail || src?.street || '',
+          area: src.area || '',
+          confirmedAt: src.confirmedAt || '',
+          userId: src.userId || '',
+          entryMode: src.userId ? 'user' : 'manual'
+        }
+        : {
+          name: '',
+          phone: '',
+          volunteerType: '低空爱好者',
+          province: '',
+          city: '',
+          district: '',
+          addressDetail: '',
+          area: '',
+          confirmedAt: '',
+          userId: '',
+          entryMode: 'user'
+        };
     }
     if (key === 'blacklist') {
       const src = isNew ? null : data.blacklist.find((b) => b.id === id);
@@ -127,10 +165,50 @@
           followUpDate: ''
         };
     }
+    if (key === 'banners') {
+      const src = isNew ? null : (data.banners || []).find((row) => row.id === id);
+      const type = src?.type || '活动';
+      const filled = data.bannerSourceCopy ? data.bannerSourceCopy(type, src?.targetId || '', data) : { targetId: '', title: '', summary: '', targetTitle: '' };
+      const nextSort = (data.banners || []).reduce((max, row) => Math.max(max, Number(row.sort) || 0), 0) + 1;
+      return src
+        ? {
+          type,
+          targetId: src.targetId || filled.targetId,
+          targetTitle: src.targetTitle || filled.targetTitle,
+          title: src.title || filled.title,
+          summary: src.summary || filled.summary,
+          startAt: src.startAt || `${data.now}T00:00`,
+          endAt: src.endAt || '',
+          state: src.state === '已停用' ? '已停用' : '已启用',
+          sort: Number(src.sort) > 0 ? Number(src.sort) : nextSort
+        }
+        : {
+          type,
+          targetId: filled.targetId,
+          targetTitle: filled.targetTitle,
+          title: filled.title,
+          summary: filled.summary,
+          startAt: `${data.now}T00:00`,
+          endAt: `${String(data.now || '2026-07-30').slice(0, 4)}-08-20T23:59`,
+          state: '已启用',
+          sort: nextSort
+        };
+    }
     return {};
   };
 
   const backKey = (key) => (key === 'feedback-forms' ? 'feedback' : key);
+
+  const regionAddressRow = (draft, mock, ui, input, opts = {}) => {
+    const cascader = ui?.regionCascader
+      ? ui.regionCascader(draft, mock, {
+        open: Boolean(opts.regionCascaderOpen),
+        active: opts.regionCascaderActive || {},
+        useAddressDistricts: Boolean(opts.useAddressDistricts)
+      })
+      : '';
+    return `<div class="region-cascade-row"><div class="region-cascade-side">${cascader}</div><div class="region-cascade-detail">${input('addressDetail', { required: Boolean(opts.requiredDetail), placeholder: '请填写详细地址，如街道、路名门牌号' })}</div></div>`;
+  };
 
   const renderBody = (key, draft, safe, opts = {}) => {
     const rich = RE();
@@ -173,20 +251,23 @@
     }
     if (key === 'users') {
       const mock = (typeof window !== 'undefined' && window.LowAltitudeMock) || {};
-      const picked = mock.normalizeResidenceSelection ? mock.normalizeResidenceSelection(draft) : draft;
-      const provinces = (mock.residenceProvinceOptions && mock.residenceProvinceOptions()) || [];
-      const cities = (mock.residenceCityOptions && mock.residenceCityOptions(picked.province)) || [];
-      const districts = (mock.residenceDistrictOptions && mock.residenceDistrictOptions(picked.province, picked.city)) || [];
-      const col = (level, items, selected) => `<div class="region-picker-col admin-region-col" role="listbox">${items.map((item) => `<button type="button" class="region-picker-item${selected === item ? ' is-active' : ''}" data-action="pick-region" data-level="${level}" data-value="${safe(item)}">${safe(item)}</button>`).join('')}</div>`;
-      const addressField = `<div class="compound-field region-cascade"><div class="admin-region-panel" aria-label="省市区联动选择"><div class="region-picker-highlight" aria-hidden="true"></div>${col('province', provinces, picked.province)}${col('city', cities, picked.city)}${col('district', districts, picked.district)}</div>${input('addressDetail', { placeholder: '请填写详细地址，如街道、路名门牌号' })}</div>`;
+      const addressField = regionAddressRow(draft, mock, ui, input, {
+        regionCascaderOpen: opts.regionCascaderOpen,
+        regionCascaderActive: opts.regionCascaderActive
+      });
       return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>姓名${input('name', { required: true })}</label><label>身份证号${input('idNumber', { required: true })}</label><label>手机号码${input('phone', { required: true })}</label><label>地址${textarea('address', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>常住地址${addressField}</label><label>紧急联系人${input('emergencyContact')}</label><label>紧急联系电话${input('emergencyPhone', { type: 'tel' })}</label></fieldset></form>`;
     }
     if (key === 'companies') {
       return `<form class="form-stack" id="admin-form"><fieldset class="config-fieldset"><legend>基本信息</legend><label>企业名称${input('name', { required: true })}</label><label>统一社会信用代码${input('creditCode', { required: true })}</label><label>认证状态${select('verified', ['已认证', '待认证'])}</label><label>授权联系人${input('contact', { required: true })}</label><label>联系电话${input('phone', { required: true })}</label></fieldset><fieldset class="config-fieldset"><legend>补充信息</legend><label>无人机主要用途${input('droneUsage')}</label><label>安全负责人${input('safetyOfficer')}</label><label>安全负责人电话${input('safetyPhone')}</label></fieldset></form>`;
     }
     if (key === 'volunteers') {
-      const streets = (typeof window !== 'undefined' && window.LowAltitudeMock?.yinzhouStreets) || [];
-      const areaSelect = `<select required data-draft-field="area"><option value="">请选择所属区域</option>${streets.map((street) => `<option${(draft.area || '') === street ? ' selected' : ''}>${safe(street)}</option>`).join('')}</select>`;
+      const mock = (typeof window !== 'undefined' && window.LowAltitudeMock) || {};
+      const addressField = regionAddressRow(draft, mock, ui, input, {
+        regionCascaderOpen: opts.regionCascaderOpen,
+        regionCascaderActive: opts.regionCascaderActive,
+        useAddressDistricts: true,
+        requiredDetail: true
+      });
       const isNew = Boolean(opts.isNew);
       const entryMode = isNew ? (draft.entryMode === 'manual' ? 'manual' : 'user') : 'manual';
       const enrolledPhones = new Set((opts.volunteers || []).filter((v) => (v.state || '在册') === '在册').map((v) => v.phone));
@@ -217,7 +298,7 @@
       const manualIdentity = !isNew || entryMode === 'manual'
         ? `<label>姓名${input('name', { required: true })}</label><label>手机号码${input('phone', { required: true, placeholder: '如 138****0000' })}</label>`
         : '';
-      return `<form class="form-stack" id="admin-form">${modeTabs}${linkedNote}${userPicker}${manualIdentity}<label>志愿者类型${select('volunteerType', ['低空爱好者', '社区网格员'])}</label><label>所属区域${areaSelect}</label><label>线下确认日期${input('confirmedAt', { required: true, type: 'date' })}</label></form>`;
+      return `<form class="form-stack" id="admin-form">${modeTabs}${linkedNote}${userPicker}${manualIdentity}<label>志愿者类型${select('volunteerType', ['低空爱好者', '社区网格员'])}</label><label>常住地址${addressField}</label><label>线下确认日期${input('confirmedAt', { required: true, type: 'date' })}</label></form>`;
     }
     if (key === 'blacklist') {
       return `<form class="form-stack" id="admin-form"><label>对象名称${input('name', { required: true })}</label><label>对象类型${select('type', ['个人用户', '企业用户', '授权账号'])}</label><label>拉黑原因${textarea('reason', { required: true })}</label><label>状态${select('state', ['已拉黑', '已取消'])}</label></form>`;
@@ -266,6 +347,16 @@
       const suggestionRequired = result === '通过' || result === '不通过';
       return `<form class="form-stack" id="admin-form"><input type="hidden" data-draft-field="deviceMode" value="${deviceMode}" />${modeTabs}${ledgerPicker}${manualFields}${ledgerHidden}<div class="form-grid-2"><label>核查类型${select('checkType', ['证照核查', '现场核查', '抽查复核'])}</label><label>核查方式${select('checkMethod', ['材料核验', '上门核查', '电话复核'])}</label></div><label>核查地点${input('checkPlace', { required: true, placeholder: '如：鄞州区低空服务窗口 / 企业机库 / 远程复核' })}</label><label>核查结果${select('result', ['待核查', '通过', '不通过'])}</label><label>问题描述${textarea('issueDesc', { placeholder: '不通过时可填写发现的问题' })}</label><label>处理意见${textarea('suggestion', { required: suggestionRequired, placeholder: suggestionRequired ? '选择通过/不通过时必填核查结论与处理意见' : '待核查时可留空；完成核查时再填写' })}</label><label>计划跟进日期${input('followUpDate', { type: 'date' })}</label></form>`;
     }
+    if (key === 'banners') {
+      const mock = global.LowAltitudeMock || {};
+      const types = mock.bannerTypes || ['活动', '低空安全普法', '公告'];
+      const type = draft.type || types[0];
+      const sources = mock.bannerSources ? mock.bannerSources(type, mock) : [];
+      const sourceOptions = sources.length
+        ? sources.map((item) => `<option value="${safe(item.id)}"${draft.targetId === item.id ? ' selected' : ''}>${safe(item.title)}</option>`).join('')
+        : '<option value="">暂无可用内容</option>';
+      return `<form class="form-stack" id="admin-form"><input type="hidden" data-draft-field="targetTitle" value="${safe(draft.targetTitle || '')}" /><label>推送类型<select required data-draft-field="type">${types.map((item) => `<option value="${safe(item)}"${type === item ? ' selected' : ''}>${safe(item)}</option>`).join('')}</select></label><label>关联内容<select required data-draft-field="targetId">${sourceOptions}</select></label><label>推送标题${input('title', { required: true, placeholder: '选择内容后自动带入，可继续修改' })}</label><label>推送简介${textarea('summary', { required: true, placeholder: '选择内容后自动带入摘要，可继续编辑推送文案' })}</label><div class="form-grid-2"><label>生效开始时间${input('startAt', { required: true, type: 'datetime-local' })}</label><label>生效结束时间${input('endAt', { required: true, type: 'datetime-local' })}</label></div><div class="form-grid-2"><label>启用状态${select('state', ['已启用', '已停用'])}</label><label><span>排序</span>${ui.sortStepper('sort', draft.sort || 1)}</label></div></form>`;
+    }
     return '<div class="empty">未配置的表单模块</div>';
   };
 
@@ -276,6 +367,7 @@
     faq: ['新建常见问题', '编辑常见问题', '仅已发布内容在用户端可见。'],
     laws: ['新建政策法规', '编辑政策法规', '需填写发布单位与生效起止日期。'],
     news: ['新建新闻公告', '编辑新闻公告', '封面可上传图片或视频。'],
+    banners: ['新建 Banner 推送', '编辑 Banner 推送', '选择类型与内容后自动带入标题和简介，可继续修改并设置生效时段。'],
     users: ['新增用户', '编辑个人信息', '保存后同步至用户端个人档案。'],
     companies: ['新增企业', '编辑企业信息', '保存后同步至用户端企业档案。'],
     volunteers: ['添加志愿者', '编辑志愿者', ''],
@@ -283,12 +375,12 @@
     verification: ['新增核查', '编辑核查记录', '']
   };
 
-  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false, users = [], volunteers = [], deviceQuery = '', userQuery = '', pickerPage = 1 }) => {
+  const render = ({ key, id, draft, shell, safe, enrollLocked = false, canSaveEnrollFields = false, users = [], volunteers = [], deviceQuery = '', userQuery = '', pickerPage = 1, regionCascaderOpen = false, regionCascaderActive = {} }) => {
     const isNew = !id || id === 'new';
     const meta = titles[key] || ['新建', '编辑', ''];
     const title = isNew ? meta[0] : meta[1];
     const preview = ['activities', 'laws', 'news', 'guides', 'faq'].includes(key);
-    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields, isNew, users, volunteers, deviceQuery, userQuery, pickerPage });
+    const body = renderBody(key, draft, safe, { enrollLocked, canSaveEnrollFields, isNew, users, volunteers, deviceQuery, userQuery, pickerPage, regionCascaderOpen, regionCascaderActive });
     const page = FP().render({
       title,
       description: meta[2],
